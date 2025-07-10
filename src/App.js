@@ -50,11 +50,29 @@ function App() {
 
 
   return (
-    <div className="App">
-      <header className="App-header">
-       <p id="app">앱실행 완료 / <a href="#" id="token-url">API 자격증명 얻기</a></p>
-      </header>
-    </div>
+<AppContainer>
+  <AppHeader>
+    <StateText>
+      앱실행 완료 / {
+        tokenUrl?(
+          <TokenLink href={tokenUrl} onClick={handleAuthClick}>
+            API 자격증명 얻기
+          </TokenLink>
+        ) : (
+          <TokenLink href="#" onClick={(e)=> e.preventDefault()}>
+            설정 필요 !
+          </TokenLink>
+        )
+      }
+    </StateText>
+    {authCode && (
+      <div style={{marginTop:'20px', fontSize:'0.8em'}}>
+        <p>✅ 인증 코드를 받았습니다!</p>
+        <p>코드 : {authCode.substring(0, 20)}...</p>
+      </div>
+    )}
+  </AppHeader>
+</AppContainer>
   );
 }
 
