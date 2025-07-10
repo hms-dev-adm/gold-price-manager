@@ -68,7 +68,7 @@ function App() {
     //토큰 URL 생성
     const generateTokenUrl = (targetMallId) =>{
       // if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID || !CAFE24_CONFIG.REDIRECT_URI)
-      if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID){
+      if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID || !CAFE24_CONFIG.REDIRECT_URI){
         console.error('필수 설정 정보가 없습니다.');
         return;
       }
@@ -81,7 +81,18 @@ function App() {
       `&scope=${encodeURIComponent(CAFE24_CONFIG.SCOPE)}`;
 
       setTokenUrl(authUrl);
-    
+    };
+
+    const checkConfiguration = () => {
+      const hasRequiredConfig = 
+      CAFE24_CONFIG.CLIENT_ID && 
+      !CAFE24_CONFIG.CLIENT_ID.includes('your_') &&
+      CAFE24_CONFIG.CLIENT_SECRET && 
+      !CAFE24_CONFIG.CLIENT_SECRET.includes('your_') &&
+      CAFE24_CONFIG.MALL_ID && 
+      !CAFE24_CONFIG.MALL_ID.includes('your_');
+
+      setIsConfigured(hasRequiredConfig);
     }
 
   //mall id & 인증코드 확인
@@ -121,7 +132,6 @@ function App() {
     if(!tokenUrl){
       e.preventDefault();
       alert('token url이 생성되지 않았습니다. 설정을 확인해주세요.')
-
     }
   }
 
@@ -152,6 +162,40 @@ function App() {
       </div>
     )}
   </AppHeader>
+
+  <InfoSection>
+    <h2>현재 설정 상태</h2>
+
+    <ConfigInfo>
+      <h3>📋설정 정보</h3>
+      <p><strong>Mall ID:</strong> {mallId || '설정되지 않음'}</p>
+          <p><strong>Client ID:</strong> {CAFE24_CONFIG.CLIENT_ID?.substring(0, 10)}... {isConfigured ? '✅' : '❌'}</p>
+          <p><strong>Redirect URI:</strong> {CAFE24_CONFIG.REDIRECT_URI}</p>
+          <p><strong>권한 범위:</strong> {CAFE24_CONFIG.SCOPE}</p>
+          <p><strong>설정 완료:</strong> {isConfigured ? '✅ 완료' : '❌ 미완료'}</p>
+    </ConfigInfo>
+
+        {!isConfigured && (
+          <ConfigInfo style={{ backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}>
+            <h3>⚠️ 설정이 필요합니다</h3>
+            <p>다음 파일을 확인하고 올바른 값으로 설정해주세요:</p>
+            <ul style={{ textAlign: 'left' }}>
+              <li><code>.env</code> 파일의 환경 변수들</li>
+              <li><code>src/utils/constants.js</code> 파일의 CAFE24_CONFIG</li>
+              <li>카페24 개발자센터에서 앱 승인 여부</li>
+            </ul>
+          </ConfigInfo>
+        )}
+
+        {tokenUrl && (
+          <ConfigInfo style={{ backgroundColor: '#d4edda', border: '1px solid #c3e6cb' }}>
+            <h3>🔗 생성된 인증 URL</h3>
+            <p style={{ wordBreak: 'break-all', fontSize: '0.9rem' }}>
+              {tokenUrl}
+            </p>
+          </ConfigInfo>
+        )}
+  </InfoSection>
 </AppContainer>
   );
 }
