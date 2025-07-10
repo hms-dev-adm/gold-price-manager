@@ -4,7 +4,7 @@ export const CAFE24_CONFIG = {
   CLIENT_ID: 'iamGWDTJPZqpaYNMl8qpyC',
   CLIENT_SECRET: 'v0cbc3gzElSjtxdDOTVKOA',
   SHOP_NO: 1,
-  ACCESS_TOKEN: 'your_access_token' // 실제로는 OAuth 플로우로 획득
+  // REDIRECT_URI:'',
 };
 
 // 금 가격 설정

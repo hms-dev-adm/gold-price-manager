@@ -22,12 +22,26 @@ function App() {
     
     if(mallIdParam){
       setMallId(mallIdParam);
-      generateTokenUrl(mallIdParam); //아래
+      generateTokenUrl(mallIdParam); //아래 기능 구현
     }
 
     //토큰 URL 생성
     const generateTokenUrl = (targetMallId) =>{
-      setAuthCode(codeParam);
+      // if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID || !CAFE24_CONFIG.REDIRECT_URI)
+      if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID){
+        console.error('필수 설정 정보가 없습니다.');
+        return;
+      }
+
+      const authUrl = `https://${targetMallId}.cafe24api.com/api/v2/oauth/authorize?`+
+      `response_type=code` +
+      `&client_id=${CAFE24_CONFIG.CLIENT_ID}` +
+      `&state=S256` +
+      `&redirect_uri=${encodeURIComponent(CAFE24_CONFIG.REDIRECT_URI)}` +
+      `&scope=${encodeURIComponent(CAFE24_CONFIG.SCOPE)}`;
+
+      setTokenUrl(authUrl);
+    
     }
   })
 
