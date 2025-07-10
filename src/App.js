@@ -65,21 +65,6 @@ function App() {
   const [authCode, setAuthCode] = useState('');
   const [isConfigured, setIsConfigured] = useState('');
   
-  //mall id & 인증코드 확인
-  useEffect(()=>{
-    const url = new URL(window.location.href);
-    const urlParams = url.searchParams;
-
-    //mall id
-    const mallIdParam = urlParams.get('mall_id');
-    const codeParam = urlParams.get('code');
-    const stateParam = urlParams.get('state');
-    
-    if(mallIdParam){
-      setMallId(mallIdParam);
-      generateTokenUrl(mallIdParam); //아래 기능 구현
-    }
-
     //토큰 URL 생성
     const generateTokenUrl = (targetMallId) =>{
       // if(!targetMallId || !CAFE24_CONFIG.CLIENT_ID || !CAFE24_CONFIG.REDIRECT_URI)
@@ -98,7 +83,38 @@ function App() {
       setTokenUrl(authUrl);
     
     }
-  })
+
+  //mall id & 인증코드 확인
+  useEffect(()=>{
+    const url = new URL(window.location.href);
+    const urlParams = url.searchParams;
+
+    //mall id
+    const mallIdParam = urlParams.get('mall_id');
+    const codeParam = urlParams.get('code');
+    const stateParam = urlParams.get('state');
+    
+    if(mallIdParam){
+      setMallId(mallIdParam);
+      generateTokenUrl(mallIdParam); //아래 기능 구현
+    } else {
+
+      //URL에 mall_id가 없는 경우 디폴드 값 불러오기
+      if(CAFE24_CONFIG.MALL_ID && !CAFE24_CONFIG.MALL_ID.includes('your_')){
+        setMallId(CAFE24_CONFIG.MALL_ID);
+        generateTokenUrl(CAFE24_CONFIG.MALL_ID);
+      }
+    }
+
+    //인증 코드가 있는 경우
+    if(codeParam){
+      setAuthCode(codeParam);
+      console.log('받은 인증 코드: ', codeParam);
+      console.log('상태값: ', stateParam)
+    }
+
+    //설정 유효성 검사 -test
+  },[])
 
   //인증 링크 클릭 handler
   const handleAuthClick = (e) => {
