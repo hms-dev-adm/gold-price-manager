@@ -1,5 +1,5 @@
 // 인증 코드 입력 컴포넌트
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 
 const AuthContainer = styled.div`
@@ -82,8 +82,8 @@ const TokenInfo = styled.div`
   font-size: 14px;
 `;
 
-const AuthCodeInput = ({ onTokenReceived }) => {
-  const [authCode, setAuthCode] = useState("");
+const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
+  const [authCode, setAuthCode] = useState(initialCode || "");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [tokenData, setTokenData] = useState(null);
@@ -160,6 +160,13 @@ const AuthCodeInput = ({ onTokenReceived }) => {
     localStorage.removeItem("cafe24_refresh_token");
     localStorage.removeItem("cafe24_token_expires");
   };
+
+  // 초기 코드가 있으면 자동으로 토큰 발급 시도
+  useEffect(() => {
+    if (initialCode && initialCode.trim()) {
+      handleGetToken();
+    }
+  }, [initialCode]);
 
   return (
     <AuthContainer>
