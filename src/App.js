@@ -1,9 +1,17 @@
 import React, {useState, useEffect }from 'react';
 import styled from 'styled-components';
 import {CAFE24_CONFIG} from './utils/constants'
+//추가
+import AuthCodeInput from './components/AuthCodeInput.js/index.js';
+import ProductPriceManager from './components/ProductPriceManager.js';
 
 const AppContainer = styled.div`
-text-align : center;`;
+text-align : center;`
+
+const Section = styled.section`
+  margin-bottom: 40px;
+`;
+
 
 const AppHeader = styled.header`
 background-color: #282c34;
@@ -163,7 +171,7 @@ function App() {
     )}
   </AppHeader>
 
-  <InfoSection>
+  {/* <InfoSection>
     <h2>현재 설정 상태</h2>
 
     <ConfigInfo>
@@ -195,7 +203,15 @@ function App() {
             </p>
           </ConfigInfo>
         )}
-  </InfoSection>
+  </InfoSection> */}
+
+  <Section>
+    <AuthCodeInput onTokenReceived={handleTokenReceived}/>
+  </Section>
+
+  <Section>
+    <ProductPriceManager isAuthenticated={isAuthenticated} />
+  </Section>
 </AppContainer>
   );
 }
