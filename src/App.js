@@ -1,108 +1,152 @@
-import React, {useState, useEffect }from 'react';
-import styled from 'styled-components';
-import {CAFE24_CONFIG} from './utils/constants'
-//추가
-import AuthCodeInput from './components/AuthCodeInput.js';
-import ProductPriceManager from './components/ProductPriceManager.js';
+import React from "react";
+import styled from "styled-components";
+import { useAuthCode } from "./hooks/useAuthCode.js";
+import AuthCodeDisplay from "./components/AuthCodeDisplay.js";
+import ProductPriceManager from "./components/ProductPriceManager";
 
 const AppContainer = styled.div`
-text-align : center;`
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+`;
+
+const Header = styled.header`
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+`;
+
+const Title = styled.h1`
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 300;
+  margin-bottom: 10px;
+`;
+
+const Subtitle = styled.p`
+  margin: 0;
+  font-size: 1.2rem;
+  opacity: 0.9;
+  margin-bottom: 15px;
+`;
+
+const StatusBadge = styled.div`
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 0.9rem;
+  backdrop-filter: blur(10px);
+`;
 
 const Section = styled.section`
   margin-bottom: 40px;
+  background: white;
+  border-radius: 15px;
+  padding: 30px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
 `;
 
-
-const AppHeader = styled.header`
- text-align: center;
-  margin-bottom: 40px;
-  padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 10px;
+const SectionTitle = styled.h2`
+  margin-top: 0;
+  color: #333;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 10px;
+  font-size: 1.8rem;
 `;
 
+const LoadingScreen = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  color: #666;
+`;
+
+const Spinner = styled.div`
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+`;
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false); //인증 여부 확인 - 로그인 여부
-  const [tokenData, setTokenData] = useState(null); //토큰 정보 저장 객체
-
-  useEffect(()=>{
-    // 페이지 로드 시 저장된 토큰 확인
-    const savedToken = localStorage.getItem('cafe24_access_token');
-    const tokenExpires = localStorage.getItem('cafe24_token_expires');
-
-    if(savedToken && tokenExpires && Date.now() < parseInt(tokenExpires)) {
-      setIsAuthenticated(true);
-      setTokenData({
-        access_token: savedToken,
-        expires_at: new Date(parseInt(tokenExpires))
-      });
-    }
-  },[]);
-
-  //새로운 토큰을 받았을때
-  const handleTokenReceived = (token) =>{
-    setIsAuthenticated(true);
-    setTokenData({
-      ...token, //받은 토큰의 모든 정보를 복사
-      expires_at: new Date(Date.now() + (token.expires_in * 1000))
-    });
-  };
-
+  const {
+    authCode,
+    tokenData,
+    loading,
+    error,
+    isAuthenticated,
+    manualTokenRequest,
+    clearAuth,
+  } = useAuthCode();
 
   return (
-<AppContainer>
-  <AppHeader>
-    {isAuthenticated && tokenData && (
-      <div style={{fontSize : '0.9em', marginTop:'10px'}}>
-        ✅ 인증됨 | 만료: {tokenData.expires_at.toLocaleString()}
-      </div>
-    )}
-  </AppHeader>
+    <AppContainer>
+      <Header>
+        <Title>카페24 상품 가격 관리 시스템</Title>
+        <Subtitle>금 시세 기반 자동 가격 업데이트</Subtitle>
 
-  {/* <InfoSection>
-    <h2>현재 설정 상태</h2>
-
-    <ConfigInfo>
-      <h3>📋설정 정보</h3>
-      <p><strong>Mall ID:</strong> {mallId || '설정되지 않음'}</p>
-          <p><strong>Client ID:</strong> {CAFE24_CONFIG.CLIENT_ID?.substring(0, 10)}... {isConfigured ? '✅' : '❌'}</p>
-          <p><strong>Redirect URI:</strong> {CAFE24_CONFIG.REDIRECT_URI}</p>
-          <p><strong>권한 범위:</strong> {CAFE24_CONFIG.SCOPE}</p>
-          <p><strong>설정 완료:</strong> {isConfigured ? '✅ 완료' : '❌ 미완료'}</p>
-    </ConfigInfo>
-
-        {!isConfigured && (
-          <ConfigInfo style={{ backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}>
-            <h3>⚠️ 설정이 필요합니다</h3>
-            <p>다음 파일을 확인하고 올바른 값으로 설정해주세요:</p>
-            <ul style={{ textAlign: 'left' }}>
-              <li><code>.env</code> 파일의 환경 변수들</li>
-              <li><code>src/utils/constants.js</code> 파일의 CAFE24_CONFIG</li>
-              <li>카페24 개발자센터에서 앱 승인 여부</li>
-            </ul>
-          </ConfigInfo>
+        {loading ? (
+          <StatusBadge>🔄 인증 처리 중...</StatusBadge>
+        ) : isAuthenticated ? (
+          <StatusBadge>
+            ✅ 인증 완료 | 만료: {tokenData?.expires_at?.toLocaleString()}
+          </StatusBadge>
+        ) : (
+          <StatusBadge>❌ 인증 필요</StatusBadge>
         )}
+      </Header>
 
-        {tokenUrl && (
-          <ConfigInfo style={{ backgroundColor: '#d4edda', border: '1px solid #c3e6cb' }}>
-            <h3>🔗 생성된 인증 URL</h3>
-            <p style={{ wordBreak: 'break-all', fontSize: '0.9rem' }}>
-              {tokenUrl}
-            </p>
-          </ConfigInfo>
-        )}
-  </InfoSection> */}
+      {loading && (
+        <Section>
+          <LoadingScreen>
+            <Spinner />
+            <h3>인증 코드를 처리하고 있습니다...</h3>
+            <p>잠시만 기다려주세요.</p>
+          </LoadingScreen>
+        </Section>
+      )}
 
-  <Section>
-    <AuthCodeInput onTokenReceived={handleTokenReceived}/>
-  </Section>
+      {!loading && (
+        <Section>
+          <SectionTitle>🔐 인증 상태</SectionTitle>
+          <AuthCodeDisplay
+            authCode={authCode}
+            tokenData={tokenData}
+            error={error}
+            isAuthenticated={isAuthenticated}
+            onManualTokenRequest={manualTokenRequest}
+            onClearAuth={clearAuth}
+          />
+        </Section>
+      )}
 
-  <Section>
-    <ProductPriceManager isAuthenticated={isAuthenticated} />
-  </Section>
-</AppContainer>
+      {isAuthenticated && !loading && (
+        <Section>
+          <SectionTitle>💰 상품 가격 관리</SectionTitle>
+          <ProductPriceManager isAuthenticated={isAuthenticated} />
+        </Section>
+      )}
+    </AppContainer>
   );
 }
 
