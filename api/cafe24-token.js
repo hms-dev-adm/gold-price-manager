@@ -22,6 +22,11 @@ export default async function handler(req, res) {
   try {
     const { grant_type, code, refresh_token, redirect_uri } = req.body;
 
+    console.log("요청 받음:", {
+      grant_type,
+      code: code ? "exists" : "missing",
+    });
+
     if (!grant_type) {
       return res.status(400).json({ error: "grant_type이 필요합니다." });
     }
@@ -40,10 +45,21 @@ export default async function handler(req, res) {
     const clientId = process.env.CAFE24_CLIENT_ID;
     const clientSecret = process.env.CAFE24_CLIENT_SECRET;
 
+    console.log("환경 변수 확인:", {
+      mallId,
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+    });
+
     if (!clientId || !clientSecret) {
-      return res
-        .status(500)
-        .json({ error: "서버 설정 오류: 클라이언트 정보가 없습니다." });
+      return res.status(500).json({
+        error: "서버 설정 오류: 클라이언트 정보가 없습니다.",
+        debug: {
+          mallId,
+          hasClientId: !!clientId,
+          hasClientSecret: !!clientSecret,
+        },
+      });
     }
 
     // Base64 인코딩 (카페24 정책에 따라)
@@ -52,12 +68,7 @@ export default async function handler(req, res) {
     );
     const tokenUrl = `https://${mallId}.cafe24api.com/api/v2/oauth/token`;
 
-    console.log("토큰 요청:", {
-      tokenUrl,
-      grant_type,
-      code: code ? code.substring(0, 10) + "..." : undefined,
-      has_refresh_token: !!refresh_token,
-    });
+    console.log("카페24 API 요청:", { tokenUrl, grant_type });
 
     // URLSearchParams로 form-urlencoded 형식 생성
     const formData = new URLSearchParams();
@@ -83,6 +94,11 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
+
+    console.log("카페24 API 응답:", {
+      status: response.status,
+      ok: response.ok,
+    });
 
     if (!response.ok) {
       console.error("토큰 발급/갱신 실패:", data);
