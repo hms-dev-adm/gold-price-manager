@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { CAFE24_CONFIG } from "../utils/constants";
+import { useNavigate } from "react-router-dom";
 
 const Container = styled.div`
   max-width: 600px;
@@ -115,7 +116,19 @@ const PolicyInfo = styled.div`
   margin-bottom: 20px;
 `;
 
+const NavigationSection = styled.div`
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  color: #856404;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+  text-align: center;
+`;
+
 const AuthPage = () => {
+  const navigate = useNavigate();
+
   const [authCode, setAuthCode] = useState("");
   const [tokenData, setTokenData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -250,7 +263,6 @@ const AuthPage = () => {
     setIsAuthenticated(true);
     setShowDebugMode(true); // 토큰 발급 후 디버그 모드 활성화
     loadStorageData(); // 스토리지 데이터 새로고침
-
     console.log("토큰 저장 완료");
   };
 
@@ -308,6 +320,12 @@ const AuthPage = () => {
     loadStorageData();
 
     alert("로그아웃되었습니다.");
+
+    navigate("/");
+  };
+
+  const handleGoToProducts = () => {
+    navigate("/products");
   };
 
   const getTokenTimeRemaining = () => {
@@ -395,6 +413,14 @@ const AuthPage = () => {
               <strong>권한:</strong> {tokenData.scope}
             </p>
           </TokenInfo>
+          {/* 상품 관리 페이지로 이동 */}
+          <NavigationSection>
+            <h4>🚀 다음 단계</h4>
+            <p>인증이 완료되었습니다. 이제 상품 가격을 관리할 수 있습니다.</p>
+            <Button variant="success" onClick={handleGoToProducts}>
+              💰 상품 가격 관리하러 가기
+            </Button>
+          </NavigationSection>
 
           {/* 디버그 모드 토글 */}
           <ToggleButton onClick={() => setShowDebugMode(!showDebugMode)}>
