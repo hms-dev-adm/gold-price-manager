@@ -339,7 +339,7 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
 
   return (
     <AuthContainer>
-      <h3>🔐 카페24 인증 코드 입력 v2.1 정책준수테스트</h3>
+      <h3>🔐 카페24 인증 코드 입력 v2.3 정책준수테스트</h3>
 
       {!tokenData ? (
         <div>
