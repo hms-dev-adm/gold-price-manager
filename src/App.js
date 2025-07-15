@@ -93,11 +93,12 @@ function App() {
   const [showDebugInfo, setShowDebugInfo] = useState(true); // 디버그 정보 표시 여부, 안보기 - false
   const [configError, setConfigError] = useState("");
 
-  console.log("환경 변수 확인:");
-  console.log("MALL_ID:", process.env.REACT_APP_CAFE24_MALL_ID);
-  console.log("CLIENT_ID:", process.env.REACT_APP_CAFE24_CLIENT_ID);
-  console.log("CLIENT_SECRET:", process.env.REACT_APP_CAFE24_CLIENT_SECRET);
-  console.log("모든 환경 변수:", process.env);
+  //보안
+  // console.log("환경 변수 확인:");
+  // console.log("MALL_ID:", process.env.REACT_APP_CAFE24_MALL_ID);
+  // console.log("CLIENT_ID:", process.env.REACT_APP_CAFE24_CLIENT_ID);
+  // console.log("CLIENT_SECRET:", process.env.REACT_APP_CAFE24_CLIENT_SECRET);
+  // console.log("모든 환경 변수:", process.env);
 
   // 토큰 URL 생성
   const generateTokenUrl = (targetMallId) => {
