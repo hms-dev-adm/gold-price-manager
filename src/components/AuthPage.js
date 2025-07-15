@@ -5,7 +5,7 @@ import { CAFE24_CONFIG } from "../utils/constants";
 import { useNavigate } from "react-router-dom";
 
 const Container = styled.div`
-  max-width: 600px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -46,7 +46,7 @@ const Input = styled.input`
 
 const Button = styled.button`
   background: ${(props) =>
-    props.variant === "danger" ? "#dc3545" : "#007bff"};
+    props.variant === "danger" ? "#dc3545" : "#b6ca30"};
   color: white;
   border: none;
   padding: 12px 24px;
@@ -62,7 +62,7 @@ const Button = styled.button`
 `;
 
 const ToggleButton = styled.button`
-  background: #6c757d;
+  background: #b6ca30;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -345,10 +345,10 @@ const AuthPage = () => {
   return (
     <Container>
       <Header>
-        <Title>카페24 API 인증</Title>
-        <p>금 가격 관리 시스템</p>
+        <Title>카페24 API Auth</Title>
+        <p>Authorization Debuging</p>
       </Header>
-      <PolicyInfo>
+      {/* <PolicyInfo>
         <h4>📋 카페24 토큰 정책</h4>
         <p>
           <strong>액세스 토큰:</strong> 2시간 유효
@@ -356,10 +356,7 @@ const AuthPage = () => {
         <p>
           <strong>리프레시 토큰:</strong> 2주간 유효
         </p>
-        <p>
-          <strong>권장사항:</strong> 토큰 만료 전 refresh_token으로 자동 갱신
-        </p>
-      </PolicyInfo>
+      </PolicyInfo> */}
       {!isAuthenticated ? (
         <Section>
           <h2>🔐 인증 코드 입력</h2>
@@ -415,10 +412,8 @@ const AuthPage = () => {
           </TokenInfo>
           {/* 상품 관리 페이지로 이동 */}
           <NavigationSection>
-            <h4>🚀 다음 단계</h4>
-            <p>인증이 완료되었습니다. 이제 상품 가격을 관리할 수 있습니다.</p>
             <Button variant="success" onClick={handleGoToProducts}>
-              💰 상품 가격 관리하러 가기
+              Go To Product Manager
             </Button>
           </NavigationSection>
 

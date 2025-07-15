@@ -16,7 +16,7 @@ const Header = styled.header`
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 30px;
-  border-radius: 10px;
+  /* border-radius: 10px; */
   margin-bottom: 30px;
 `;
 
@@ -60,11 +60,8 @@ const ProductManager = () => {
   return (
     <Container>
       <Header>
-        <Title>상품 가격 관리</Title>
-        <p>금 시세 기반 자동 가격 업데이트</p>
-        <BackButton onClick={handleBackToAuth}>
-          ← 인증 페이지로 돌아가기
-        </BackButton>
+        <Title>상품 가격 수정페이지</Title>
+        <BackButton onClick={handleBackToAuth}>← Auth 컴포넌트로</BackButton>
       </Header>
 
       <Section>
