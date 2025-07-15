@@ -116,8 +116,30 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
     if (initialCode && initialCode.trim()) {
       setAuthCode(initialCode);
       // 자동으로 토큰 발급 시도하지 않고 사용자가 버튼 클릭하도록 함
+
+      addDebugInfo(`초기 인증 코드 감지: ${initialCode.substring(0, 20)}...`);
     }
+    // 저장된 토큰 확인
+    checkSavedToken();
   }, [initialCode]);
+
+  const addDebugInfo = (message) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugInfo((prev) => prev + `[${timestamp}] ${message}\n`);
+  };
+
+  const checkSavedToken = () => {
+    const savedToken = localStorage.getItem("cafe24_access_token");
+    const tokenExpires = localStorage.getItem("cafe24_token_expires");
+
+    if (savedToken && tokenExpires && Date.now() < parseInt(tokenExpires)) {
+      setTokenData({
+        access_token: savedToken,
+        expires_at: new Date(parseInt(tokenExpires)),
+      });
+      addDebugInfo("저장된 유효한 토큰 발견");
+    }
+  };
 
   const handleGetToken = async () => {
     if (!authCode.trim()) {
@@ -136,17 +158,20 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       // 토큰 정보를 로컬 스토리지에 저장
       const expiresAt = Date.now() + token.expires_in * 1000;
       localStorage.setItem("cafe24_access_token", token.access_token);
-      localStorage.setItem("cafe24_refresh_token", token.refresh_token);
+      if (token.refresh_token) {
+        localStorage.setItem("cafe24_refresh_token", token.refresh_token);
+      }
       localStorage.setItem("cafe24_token_expires", expiresAt.toString());
       setTokenData({
         ...token,
         expires_at: new Date(expiresAt),
       });
 
-      //부모 컴포넌트에 토큰 정보 전달 (??)
+      addDebugInfo("토큰 저장 완료");
       onTokenReceived && onTokenReceived(token);
     } catch (err) {
       setError(err.message);
+      addDebugInfo(`에러: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -155,79 +180,91 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
   const getAccessTokenWithDebug = async (code) => {
     const clientId = process.env.REACT_APP_CAFE24_CLIENT_ID;
     const clientSecret = process.env.REACT_APP_CAFE24_CLIENT_SECRET;
+    const mallId = process.env.REACT_APP_CAFE24_MALL_ID;
+    const redirectUri = process.env.REACT_APP_CAFE24_REDIRECT_URI;
 
     if (!clientId || !clientSecret) {
       throw new Error("클라이언트 ID 또는 시크릿이 설정되지 않았습니다.");
     }
 
-    // 디버그 정보 추가
-    setDebugInfo((prev) => prev + `클라이언트 ID: ${clientId}\n`);
-    setDebugInfo((prev) => prev + `인증 코드: ${code.substring(0, 20)}...\n`);
-
-    // Basic Auth 인증 정보 생성 (카페24 정책에 따라)
-    const credentials = btoa(`${clientId}:${clientSecret}`);
-    setDebugInfo(
-      (prev) => prev + `Basic Auth: ${credentials.substring(0, 30)}...\n`
+    // 1. Base64 인코딩
+    const authString = `${clientId}:${clientSecret}`;
+    const base64Credentials = btoa(authString);
+    addDebugInfo(
+      `Base64 인코딩: ${authString} -> ${base64Credentials.substring(0, 30)}...`
     );
 
-    // 요청 URL (프록시 사용)
-    const tokenUrl = "/api/cafe24/api/v2/oauth/token";
+    // 2. 요청 URL 구성
+    const tokenUrl = `/api/cafe24/api/v2/oauth/token`;
+    addDebugInfo(`요청 URL: ${tokenUrl}`);
 
-    // URLSearchParams를 사용해 form-urlencoded 형식으로 데이터 생성
+    // 3. 필수 파라미터 구성 (카페24 문서에 따라)
     const formData = new URLSearchParams();
     formData.append("grant_type", "authorization_code");
     formData.append("code", code);
-    formData.append("redirect_uri", CAFE24_CONFIG.REDIRECT_URI);
+    formData.append("redirect_uri", redirectUri);
 
-    setDebugInfo((prev) => prev + `요청 URL: ${tokenUrl}\n`);
-    setDebugInfo(
-      (prev) => prev + `요청 형식: application/x-www-form-urlencoded\n`
+    addDebugInfo(`요청 파라미터:`);
+    addDebugInfo(`- grant_type: authorization_code`);
+    addDebugInfo(`- code: ${code.substring(0, 20)}...`);
+    addDebugInfo(`- redirect_uri: ${redirectUri}`);
+
+    // 4. 헤더 구성
+    const headers = {
+      Authorization: `Basic ${base64Credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+    addDebugInfo(`요청 헤더:`);
+    addDebugInfo(
+      `- Authorization: Basic ${base64Credentials.substring(0, 30)}...`
     );
-    setDebugInfo((prev) => prev + `요청 데이터: ${formData.toString()}\n`);
-
+    addDebugInfo(`- Content-Type: application/x-www-form-urlencoded`);
     try {
+      addDebugInfo("토큰 요청 전송 중...");
+
       const response = await fetch(tokenUrl, {
         method: "POST",
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: headers,
         body: formData.toString(),
       });
 
-      setDebugInfo(
-        (prev) =>
-          prev + `응답 상태: ${response.status} ${response.statusText}\n`
-      );
+      addDebugInfo(`응답 수신: ${response.status} ${response.statusText}`);
 
       const responseText = await response.text();
-      setDebugInfo((prev) => prev + `응답 데이터: ${responseText}\n`);
+      addDebugInfo(`응답 내용: ${responseText}`);
 
       let data;
       try {
         data = JSON.parse(responseText);
-      } catch (e) {
+      } catch (parseError) {
+        addDebugInfo(`JSON 파싱 실패: ${parseError.message}`);
         throw new Error(`응답 파싱 실패: ${responseText}`);
       }
 
       if (!response.ok) {
+        addDebugInfo(`API 에러: ${JSON.stringify(data, null, 2)}`);
         throw new Error(
-          `토큰 발급 실패: ${
-            data.error_description || data.error || response.status
+          `토큰 발급 실패 (${response.status}): ${
+            data.error_description || data.error || "알 수 없는 오류"
           }`
         );
       }
-      setDebugInfo((prev) => prev + "토큰 발급 성공!\n");
+
+      addDebugInfo(`토큰 발급 성공!`);
+      addDebugInfo(`- 액세스 토큰: ${data.access_token.substring(0, 30)}...`);
+      addDebugInfo(`- 만료 시간: ${data.expires_in}초`);
+      addDebugInfo(`- 권한: ${data.scope || "N/A"}`);
+
       return data;
-    } catch (error) {
-      setDebugInfo((prev) => prev + `에러 발생: ${error.message}\n`);
-      throw error;
+    } catch (fetchError) {
+      addDebugInfo(`네트워크 에러: ${fetchError.message}`);
+      throw fetchError;
     }
   };
   const handleRefreshToken = async () => {
     const refreshToken = localStorage.getItem("cafe24_refresh_token");
     if (!refreshToken) {
-      setError("refresh_token이 없습니다.");
+      setError("refresh_token이 없습니다. 다시 로그인해주세요.");
       return;
     }
 
@@ -238,7 +275,7 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
     try {
       const clientId = process.env.REACT_APP_CAFE24_CLIENT_ID;
       const clientSecret = process.env.REACT_APP_CAFE24_CLIENT_SECRET;
-      const credentials = btoa(`${clientId}:${clientSecret}`);
+      const base64Credentials = btoa(`${clientId}:${clientSecret}`);
 
       const tokenUrl = "/api/cafe24/api/v2/oauth/token";
 
@@ -247,20 +284,21 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       formData.append("refresh_token", refreshToken);
 
       setDebugInfo((prev) => prev + `갱신 요청: ${formData.toString()}\n`);
+      addDebugInfo(`refresh_token: ${refreshToken.substring(0, 20)}...`);
 
       const response = await fetch(tokenUrl, {
         method: "POST",
         headers: {
-          Authorization: `Basic ${credentials}`,
+          Authorization: `Basic ${base64Credentials}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: formData.toString(),
       });
 
-      const data = await response.json();
-      setDebugInfo(
-        (prev) => prev + `갱신 응답: ${JSON.stringify(data, null, 2)}\n`
-      );
+      const responseText = await response.text();
+      addDebugInfo(`갱신 응답: ${response.status} - ${responseText}`);
+
+      const data = JSON.parse(responseText);
 
       if (!response.ok) {
         throw new Error(
