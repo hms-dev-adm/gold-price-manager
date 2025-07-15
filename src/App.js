@@ -30,19 +30,33 @@ const StatusText = styled.p`
   font-size: 1.2rem;
 `;
 
-const TokenLink = styled.a`
+const TokenLink = styled.button`
   color: #61dafb;
-  text-decoration: none;
+  background: transparent;
   margin-left: 10px;
   padding: 10px 20px;
-  border: 2px solid #61dafb;
   border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
   transition: all 0.3s ease;
 
   &:hover {
     background-color: #61dafb;
     color: #282c34;
   }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const TokenStatus = styled.div`
+  padding: 15px;
+  border-radius: 8px;
+  margin: 20px 0;
+  border-left: 4px solid #28a745;
+  font-size: 0.9rem;
 `;
 
 const InfoSection = styled.div`
@@ -68,11 +82,12 @@ const Section = styled.section`
 `;
 
 const AuthCodeDisplay = styled.div`
-  background: #e8f5e8;
+  /* background: #e8f5e8; */
   padding: 15px;
   border-radius: 8px;
-  margin: 20px 0;
-  border-left: 4px solid #28a745;
+  margin: 20px auto;
+  text-align: center;
+  /* border-left: 4px solid #28a745; */
 `;
 
 const ErrorDisplay = styled.div`
@@ -86,12 +101,14 @@ const ErrorDisplay = styled.div`
 
 function App() {
   const [mallId, setMallId] = useState("");
-  const [tokenUrl, setTokenUrl] = useState("");
   const [authCode, setAuthCode] = useState("");
   const [isConfigured, setIsConfigured] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showDebugInfo, setShowDebugInfo] = useState(true); // 디버그 정보 표시 여부, 안보기 - false
   const [configError, setConfigError] = useState("");
+
+  const [tokenData, setTokenData] = useState(null);
+  const [tokenUrl, setTokenUrl] = useState("");
 
   //보안
   // console.log("환경 변수 확인:");
@@ -227,25 +244,29 @@ function App() {
       generateTokenUrl(targetMallId);
     }
 
-    // 저장된 토큰 확인
-    const savedToken = localStorage.getItem("cafe24_access_token");
-    const tokenExpires = localStorage.getItem("cafe24_token_expires");
+    checkSavedToken();
 
-    if (savedToken && tokenExpires && Date.now() < parseInt(tokenExpires)) {
-      setIsAuthenticated(true);
-      console.log("저장된 토큰 발견, 인증 상태로 설정");
-    }
     console.log("✅ App 초기화 완료");
   }, []);
 
   // 인증 링크 클릭 handler
   const handleAuthClick = (e) => {
     if (!tokenUrl) {
-      e.preventDefault();
-      console.error("❌ 토큰 URL이 생성되지 않았습니다.");
+      // e.preventDefault();
       alert("토큰 URL이 생성되지 않았습니다. 설정을 확인해주세요.");
       setShowDebugInfo(true); // 디버그 정보 표시
       return;
+    }
+
+    // 새창에서 인증 페이지 열기
+    const authWindow = window.open(
+      tokenUrl,
+      "cafe24_auth",
+      "width=800,height=600,scrollbars=yes,resizable=yes"
+    );
+
+    if (!authWindow) {
+      alert("팝업이 차단되었습니다. 팝업 차단을 해제하고 다시 시도해주세요.");
     }
 
     console.log("🔗 인증 링크 클릭:", tokenUrl);
@@ -268,25 +289,77 @@ function App() {
     localStorage.removeItem("cafe24_access_token");
     localStorage.removeItem("cafe24_refresh_token");
     localStorage.removeItem("cafe24_token_expires");
+    localStorage.removeItem("cafe24_token_scope");
+    localStorage.removeItem("cafe24_token_issued_at");
+
     setIsAuthenticated(false);
     setAuthCode("");
-    console.log("로그아웃 완료");
+
+    alert("로그아웃 완료");
+  };
+
+  //저장되어 있는 토큰 있는지 확인
+  const checkSavedToken = () => {
+    const savedToken = localStorage.getItem("cafe24_access_token");
+    const tokenExpires = localStorage.getItem("cafe24_token_expires");
+    const tokenScope = localStorage.getItem("cafe24_token_scope");
+    const tokenIssuedAt = localStorage.getItem("cafe24_token_issued_at");
+
+    if (savedToken && tokenExpires) {
+      const isExpired = Date.now() >= parseInt(tokenExpires);
+
+      if (!isExpired) {
+        setIsAuthenticated(true);
+        setTokenData({
+          access_token: savedToken,
+          expires_at: new Date(parseInt(tokenExpires)),
+          scope: tokenScope,
+          issued_at: tokenIssuedAt ? new Date(parseInt(tokenIssuedAt)) : null,
+        });
+      } else {
+        setIsAuthenticated(false);
+        setTokenData(null);
+      }
+    } else {
+      setIsAuthenticated(false);
+      setTokenData(null);
+    }
   };
 
   return (
     <AppContainer>
       <AppHeader>
         <StatusText>
-          앱실행 완료 /
           <TokenLink
-            href={tokenUrl || "#"}
             onClick={handleAuthClick}
             style={{
               opacity: tokenUrl ? 1 : 0.6,
               cursor: tokenUrl ? "pointer" : "not-allowed",
             }}
           >
-            {tokenUrl ? "API 자격증명 얻기" : "설정 확인 필요"}
+            {isAuthenticated && tokenData && (
+              <TokenStatus>
+                <p>
+                  ✅ <strong>인증 완료!</strong>
+                </p>
+                <p>만료: {tokenData.expires_at?.toLocaleString()}</p>
+                <p>권한: {tokenData.scope}</p>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    background: "#dc3545",
+                    color: "white",
+                    border: "none",
+                    padding: "8px 16px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    marginTop: "10px",
+                  }}
+                >
+                  로그아웃
+                </button>
+              </TokenStatus>
+            )}
           </TokenLink>
         </StatusText>
         {/* 설정 에러 표시 */}
@@ -312,7 +385,7 @@ function App() {
         {authCode && (
           <AuthCodeDisplay>
             <p>✅ 인증 코드를 받았습니다!</p>
-            <p>코드: {authCode.substring(0, 20)}...</p>
+            <p>코드: {authCode}</p>
             <p>상태: 토큰 발급 대기중</p>
           </AuthCodeDisplay>
         )}
