@@ -1,8 +1,8 @@
 // src/components/ProductManager.js (새 파일 생성)
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
-import ProductPriceManager from "./ProductPriceManager";
+import SingleProductEditor from "./SingleProductEditor";
 
 const Container = styled.div`
   max-width: 1200px;
@@ -50,8 +50,23 @@ const Section = styled.section`
   margin-bottom: 20px;
 `;
 
+const TabButton = styled.button`
+  background: ${(props) => (props.active ? "#007bff" : "#f8f9fa")};
+  color: ${(props) => (props.active ? "white" : "#333")};
+  border: 1px solid #ddd;
+  padding: 12px 24px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  margin-right: 5px;
+
+  &:hover {
+    background: ${(props) => (props.active ? "#0056b3" : "#e9ecef")};
+  }
+`;
+
 const ProductManager = () => {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("single");
 
   const handleBackToAuth = () => {
     navigate("/auth");
@@ -65,7 +80,23 @@ const ProductManager = () => {
       </Header>
 
       <Section>
-        <ProductPriceManager isAuthenticated={true} />
+        <div style={{ marginBottom: "20px" }}>
+          <TabButton
+            $active={activeTab === "single"}
+            onClick={() => setActiveTab("single")}
+          >
+            단일 상품 수정
+          </TabButton>
+          <TabButton
+            $active={activeTab === "bulk"}
+            onClick={() => setActiveTab("bulk")}
+          >
+            일괄 가격 수정
+          </TabButton>
+        </div>
+
+        {activeTab === "single" && <SingleProductEditor />}
+        {activeTab === "bulk" && <div>asdfasdf</div>}
       </Section>
     </Container>
   );
