@@ -20,6 +20,14 @@ export default async function handler(req, res) {
       return res.status(200).end();
     }
 
+    if (req.method === "GET") {
+      return res.status(200).json({
+        message: "카페24 상품 API 엔드포인트",
+        status: "working",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });
     }
@@ -102,7 +110,7 @@ export default async function handler(req, res) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
-        "X-Cafe24-Api-Version": "2024-03-01",
+        // "X-Cafe24-Api-Version": "2024-03-01",
       },
       body: method !== "GET" ? JSON.stringify(requestBody) : undefined,
     });

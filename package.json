@@ -21,6 +21,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "dev-server": "node server.js",
+    "dev": "concurrently \"npm run dev-server\" \"npm start\"",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
@@ -48,6 +50,11 @@
     "npm": "11.4.2"
   },
   "devDependencies": {
-    "http-proxy-middleware": "^3.0.5"
+    "concurrently": "^9.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "http-proxy-middleware": "^3.0.5",
+    "node-fetch": "^2.7.0"
   }
 }

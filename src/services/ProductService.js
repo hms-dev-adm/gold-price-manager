@@ -26,22 +26,22 @@ class ProductService {
   }
 
   async apiCall(action, options = {}) {
+    //실제 api
     const token = await this.getAccessToken();
 
     console.log("ProductService API 호출:", { action, options });
 
-    const response = await fetch(this.baseUrl, {
-      method: "POST",
+     const response = await fetch(this.baseUrl, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         action,
-        ...options,
-      }),
+        ...options
+      })
     });
-
     console.log("ProductService 응답:", {
       status: response.status,
       ok: response.ok,
