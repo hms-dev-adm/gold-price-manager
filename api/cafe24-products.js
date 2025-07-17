@@ -1,4 +1,3 @@
-// api/cafe24-products.js
 export default async function handler(req, res) {
   try {
     console.log("=== Products API 호출 ===");
@@ -105,12 +104,14 @@ export default async function handler(req, res) {
 
     console.log("카페24 API 호출:", { apiUrl, method });
 
+    // API 버전을 최신으로 변경 또는 제거
     const response = await fetch(apiUrl, {
       method: method,
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
-        // "X-Cafe24-Api-Version": "2024-03-01",
+        // API 버전 헤더 제거하거나 최신 버전 사용
+        // 'X-Cafe24-Api-Version': '2021-03-01' // 또는 최신 지원 버전
       },
       body: method !== "GET" ? JSON.stringify(requestBody) : undefined,
     });
