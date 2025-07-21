@@ -1,412 +1,528 @@
-//cafe24 상품 관련 기능 조회, 수정 기능함수들 모음
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import ProductService from "../services/ProductService";
 
+// 전문적이고 미니멀한 스타일링
 const Container = styled.div`
-  max-width: 800px;
+  max-width: 1024px;
   margin: 0 auto;
-  padding: 20px;
-`;
-
-const Section = styled.div`
-  background: white;
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-`;
-
-const Title = styled.h2`
+  padding: 40px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #333;
-  margin-bottom: 20px;
 `;
 
-const SearchInput = styled.input`
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+const PageTitle = styled.h1`
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #000;
+`;
+
+const SearchSection = styled.section`
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+`;
+
+const SectionTitle = styled.h2`
   font-size: 16px;
-  margin-bottom: 15px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  color: #000;
 `;
 
-const Button = styled.button`
-  background: ${(props) =>
-    props.variant === "danger" ? "#dc3545" : "#007bff"};
-  color: white;
-  border: none;
-  padding: 10px 20px;
+const SearchTypeGroup = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
+
+const RadioButton = styled.label`
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border: 1px solid ${(props) => (props.$checked ? "#000" : "#e5e5e5")};
+  background: ${(props) => (props.$checked ? "#000" : "#fff")};
+  color: ${(props) => (props.$checked ? "#fff" : "#666")};
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  margin-right: 10px;
+  transition: all 0.2s ease;
+
+  input {
+    display: none;
+  }
+
+  &:hover {
+    border-color: #000;
+  }
+`;
+
+const SearchForm = styled.form`
+  display: flex;
+  gap: 8px;
+`;
+
+const SearchInput = styled.input`
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+
+  &:focus {
+    outline: none;
+    border-color: #000;
+  }
+
+  &::placeholder {
+    color: #999;
+  }
+`;
+
+const Button = styled.button`
+  padding: 10px 20px;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: #333;
+  }
 
   &:disabled {
-    opacity: 0.6;
+    background: #ccc;
     cursor: not-allowed;
   }
 `;
 
-const ProductCard = styled.div`
-  border: 1px solid #ddd;
+const ResultsSection = styled.section`
+  background: #fff;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 15px;
+  padding: 24px;
 `;
 
-const ProductInfo = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+const LoadingContainer = styled.div`
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 14px;
 `;
 
-const OptionList = styled.div`
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid #eee;
-`;
-
-const OptionItem = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
-  background: #f8f9fa;
+const ErrorMessage = styled.div`
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 16px;
   border-radius: 4px;
-  margin-bottom: 10px;
+  font-size: 14px;
+  margin-bottom: 16px;
 `;
 
-const PriceInput = styled.input`
-  width: 120px;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+const ProductTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+`;
+
+const TableHeader = styled.thead`
+  border-bottom: 2px solid #e5e5e5;
+
+  th {
+    text-align: left;
+    padding: 12px 8px;
+    font-weight: 500;
+    color: #666;
+    font-size: 13px;
+  }
+`;
+
+const TableBody = styled.tbody`
+  tr {
+    border-bottom: 1px solid #f5f5f5;
+
+    &:hover {
+      background: #fafafa;
+    }
+  }
+
+  td {
+    padding: 16px 8px;
+    color: #333;
+  }
+`;
+
+const ProductName = styled.div`
+  font-weight: 500;
+  margin-bottom: 4px;
+`;
+
+const ProductCode = styled.div`
+  font-size: 12px;
+  color: #666;
+`;
+
+const Price = styled.div`
+  font-weight: 500;
   text-align: right;
 `;
 
 const Badge = styled.span`
-  background: ${(props) => {
-    switch (props.type) {
-      case "T":
-        return "#28a745";
-      case "F":
-        return "#007bff";
-      case "N":
-        return "#6c757d";
-      default:
-        return "#6c757d";
-    }
-  }};
-  color: white;
-  padding: 4px 8px;
+  display: inline-block;
+  padding: 2px 8px;
+  background: ${(props) => (props.$active ? "#e0f2fe" : "#f3f4f6")};
+  color: ${(props) => (props.$active ? "#0369a1" : "#6b7280")};
   border-radius: 4px;
   font-size: 12px;
-  margin-left: 10px;
+  font-weight: 500;
 `;
 
-const SingleProductEditor = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [products, setProducts] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [productDetails, setProductDetails] = useState(null);
-  const [variants, setVariants] = useState([]);
-  const [options, setOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
+const ActionButton = styled.button`
+  padding: 6px 12px;
+  background: #fff;
+  color: #666;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #fafafa;
+    border-color: #000;
+    color: #000;
+  }
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+
+  h3 {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+  }
+
+  p {
+    font-size: 14px;
+  }
+`;
+
+const DebugPanel = styled.div`
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 400px;
+  max-height: 300px;
+  background: #000;
+  color: #0f0;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: "Monaco", "Courier New", monospace;
+  font-size: 11px;
+  overflow-y: auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+`;
+
+const ProductSearchPage = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchType, setSearchType] = useState("name");
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [debugInfo, setDebugInfo] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
-    setLoading(true);
-    try {
-      const response = await ProductService.getProducts();
-      setProducts(response.products || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  const addDebugInfo = (message) => {
+    const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
+    setDebugInfo((prev) => `[${timestamp}] ${message}\n${prev}`);
+    console.log(`[ProductSearch] ${message}`);
   };
 
-  const loadProductDetails = async (productNo) => {
-    setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      setError("검색어를 입력하세요.");
+      return;
+    }
+    await performSearch();
+  };
+
+  const performSearch = async () => {
+    setIsLoading(true);
     setError("");
+    setSearchResults([]);
 
     try {
-      // 상품 상세 정보 조회
-      const productResponse = await ProductService.getProduct(productNo);
-      const product = productResponse.product;
-      setProductDetails(product);
+      addDebugInfo(`Searching: ${searchQuery} (${searchType})`);
 
-      console.log("상품 상세 정보:", product);
+      const accessToken = localStorage.getItem("cafe24_access_token");
+      const tokenExpires = localStorage.getItem("cafe24_token_expires");
 
-      // 옵션 타입에 따라 추가 정보 조회
-      if (product.option_type === "T") {
-        // 품목생성형 옵션 조회
-        const variantsResponse = await ProductService.getVariants(productNo);
-        setVariants(variantsResponse.variants || []);
-        setOptions([]);
-        console.log("품목생성형 옵션:", variantsResponse.variants);
-      } else if (product.option_type === "F") {
-        // 상품연동형 옵션 조회
-        const optionsResponse = await ProductService.getOptions(productNo);
-        setOptions(optionsResponse.options || []);
-        setVariants([]);
-        console.log("상품연동형 옵션:", optionsResponse.options);
-      } else {
-        // 옵션 없음
-        setVariants([]);
-        setOptions([]);
+      if (
+        !accessToken ||
+        !tokenExpires ||
+        Date.now() >= parseInt(tokenExpires)
+      ) {
+        throw new Error("토큰이 없거나 만료되었습니다.");
       }
-    } catch (err) {
-      console.error("상품 상세 조회 실패:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleProductSelect = (product) => {
-    setSelectedProduct(product);
-    loadProductDetails(product.product_no);
-  };
+      const requestBody = {
+        action: "searchProducts",
+        searchType: searchType,
+        searchQuery: searchQuery.trim(),
+      };
 
-  const updateBasicPrice = async (newPrice) => {
-    if (!selectedProduct) return;
+      addDebugInfo(`Request: ${JSON.stringify(requestBody)}`);
 
-    setLoading(true);
-    try {
-      await ProductService.updateProductPrice(selectedProduct.product_no, {
-        price: newPrice,
-        retail_price: newPrice,
-        supply_price: Math.floor(newPrice * 0.8),
+      const response = await fetch("/api/cafe24-products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(requestBody),
       });
 
-      alert("기본 가격이 수정되었습니다.");
-      loadProductDetails(selectedProduct.product_no);
+      addDebugInfo(`Response: ${response.status}`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      addDebugInfo(`Found: ${data.products?.length || 0} products`);
+
+      setSearchResults(data.products || []);
+
+      // 콘솔에 상세 정보 출력
+      if (data.products?.length > 0) {
+        console.group("🔍 상품 검색 결과");
+        console.table(
+          data.products.map((p) => ({
+            번호: p.product_no,
+            상품명: p.product_name,
+            코드: p.product_code,
+            가격: p.price,
+            진열: p.display === "T" ? "진열함" : "진열안함",
+          }))
+        );
+        console.groupEnd();
+      }
     } catch (err) {
-      alert("가격 수정 실패: " + err.message);
+      setError(err.message);
+      addDebugInfo(`Error: ${err.message}`);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const updateVariantPrice = async (variantCode, newPrice) => {
-    if (!selectedProduct) return;
-
-    setLoading(true);
+  const handleProductDetail = async (productNo) => {
     try {
-      await ProductService.updateVariantPrice(
-        selectedProduct.product_no,
-        variantCode,
-        {
-          price: newPrice,
-          retail_price: newPrice,
-          supply_price: Math.floor(newPrice * 0.8),
-        }
-      );
+      addDebugInfo(`Fetching details for product ${productNo}`);
 
-      alert("품목 가격이 수정되었습니다.");
-      loadProductDetails(selectedProduct.product_no);
-    } catch (err) {
-      alert("가격 수정 실패: " + err.message);
-    } finally {
-      setLoading(false);
+      const accessToken = localStorage.getItem("cafe24_access_token");
+
+      const response = await fetch("/api/cafe24-products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: "getProduct",
+          productNo: productNo,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.group(`📋 상품 #${productNo} 상세 정보`);
+        console.log(data.product);
+        console.groupEnd();
+        addDebugInfo(`Product ${productNo} details loaded`);
+      }
+    } catch (error) {
+      addDebugInfo(`Error loading product ${productNo}: ${error.message}`);
     }
   };
 
-  const updateOptionPrice = async (optionNo, optionValues) => {
-    if (!selectedProduct) return;
+  // 키보드 단축키 (디버그 패널 토글)
+  useEffect(() => {
+    // 토큰 정보 확인
+    console.log("Mall ID:", process.env.REACT_APP_CAFE24_MALL_ID);
+    console.log("Token Scope:", localStorage.getItem("cafe24_token_scope"));
+    console.log(
+      "Token Expires:",
+      new Date(parseInt(localStorage.getItem("cafe24_token_expires")))
+    );
 
-    setLoading(true);
-    try {
-      await ProductService.updateOptionPrice(
-        selectedProduct.product_no,
-        optionNo,
-        {
-          option_value: optionValues,
-        }
-      );
-
-      alert("옵션 가격이 수정되었습니다.");
-      loadProductDetails(selectedProduct.product_no);
-    } catch (err) {
-      alert("가격 수정 실패: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredProducts = products.filter((product) =>
-    product.product_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getOptionTypeLabel = (type) => {
-    switch (type) {
-      case "T":
-        return "품목생성형";
-      case "F":
-        return "상품연동형";
-      case "N":
-        return "옵션없음";
-      default:
-        return "알 수 없음";
-    }
-  };
+    const handleKeyPress = (e) => {
+      if (e.ctrlKey && e.key === "d") {
+        e.preventDefault();
+        setShowDebug(!showDebug);
+      }
+    };
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [showDebug]);
 
   return (
     <Container>
-      <Title>단일 상품 가격 수정</Title>
+      <PageTitle>상품 관리</PageTitle>
 
-      {error && (
-        <div style={{ color: "red", marginBottom: "20px" }}>{error}</div>
+      <SearchSection>
+        <SectionTitle>상품 검색</SectionTitle>
+
+        <SearchTypeGroup>
+          <RadioButton $checked={searchType === "name"}>
+            <input
+              type="radio"
+              name="searchType"
+              value="name"
+              checked={searchType === "name"}
+              onChange={(e) => setSearchType(e.target.value)}
+            />
+            상품명
+          </RadioButton>
+          <RadioButton $checked={searchType === "code"}>
+            <input
+              type="radio"
+              name="searchType"
+              value="code"
+              checked={searchType === "code"}
+              onChange={(e) => setSearchType(e.target.value)}
+            />
+            상품코드
+          </RadioButton>
+          <RadioButton $checked={searchType === "id"}>
+            <input
+              type="radio"
+              name="searchType"
+              value="id"
+              checked={searchType === "id"}
+              onChange={(e) => setSearchType(e.target.value)}
+            />
+            상품번호
+          </RadioButton>
+        </SearchTypeGroup>
+
+        <SearchForm onSubmit={handleSubmit}>
+          <SearchInput
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={
+              searchType === "name"
+                ? "상품명 입력"
+                : searchType === "code"
+                ? "상품코드 입력"
+                : "상품번호 입력"
+            }
+            disabled={isLoading}
+          />
+          <Button type="submit" disabled={isLoading || !searchQuery.trim()}>
+            {isLoading ? "검색 중..." : "검색"}
+          </Button>
+        </SearchForm>
+      </SearchSection>
+
+      {error && <ErrorMessage>{error}</ErrorMessage>}
+
+      {searchResults.length > 0 && (
+        <ResultsSection>
+          <SectionTitle>검색 결과 ({searchResults.length})</SectionTitle>
+
+          <ProductTable>
+            <TableHeader>
+              <tr>
+                <th style={{ width: "60px" }}>번호</th>
+                <th>상품명</th>
+                <th style={{ width: "100px" }}>가격</th>
+                <th style={{ width: "80px" }}>진열</th>
+                <th style={{ width: "80px" }}>옵션</th>
+                <th style={{ width: "100px" }}>액션</th>
+              </tr>
+            </TableHeader>
+            <TableBody>
+              {searchResults.map((product) => (
+                <tr key={product.product_no}>
+                  <td>{product.product_no}</td>
+                  <td>
+                    <ProductName>{product.product_name}</ProductName>
+                    {product.product_code && (
+                      <ProductCode>{product.product_code}</ProductCode>
+                    )}
+                  </td>
+                  <td>
+                    <Price>
+                      {parseInt(product.price || 0).toLocaleString()}원
+                    </Price>
+                  </td>
+                  <td>
+                    <Badge $active={product.display === "T"}>
+                      {product.display === "T" ? "진열" : "미진열"}
+                    </Badge>
+                  </td>
+                  <td>
+                    <Badge>
+                      {product.option_type === "T"
+                        ? "품목형"
+                        : product.option_type === "F"
+                        ? "연동형"
+                        : "없음"}
+                    </Badge>
+                  </td>
+                  <td>
+                    <ActionButton
+                      onClick={() => handleProductDetail(product.product_no)}
+                    >
+                      상세보기
+                    </ActionButton>
+                  </td>
+                </tr>
+              ))}
+            </TableBody>
+          </ProductTable>
+        </ResultsSection>
       )}
 
-      {/* 상품 검색 */}
-      <Section>
-        <h3>상품 검색</h3>
-        <SearchInput
-          type="text"
-          placeholder="상품명"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-
-        <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.product_no}>
-              <ProductInfo>
-                <div>
-                  <strong>{product.product_name}</strong>
-                  <Badge type={product.option_type}>
-                    {getOptionTypeLabel(product.option_type)}
-                  </Badge>
-                </div>
-                <div>
-                  <span>{parseInt(product.price).toLocaleString()}원</span>
-                  <Button
-                    onClick={() => handleProductSelect(product)}
-                    disabled={loading}
-                  >
-                    선택
-                  </Button>
-                </div>
-              </ProductInfo>
-            </ProductCard>
-          ))}
-        </div>
-      </Section>
-
-      {/* 선택된 상품 정보 */}
-      {selectedProduct && (
-        <Section>
-          <h3>선택된 상품: {selectedProduct.product_name}</h3>
-
-          {productDetails && (
-            <div>
-              <p>
-                <strong>상품 번호:</strong> {productDetails.product_no}
-              </p>
-              <p>
-                <strong>옵션 타입:</strong>{" "}
-                {getOptionTypeLabel(productDetails.option_type)}
-              </p>
-              <p>
-                <strong>현재 가격:</strong>{" "}
-                {parseInt(productDetails.price).toLocaleString()}원
-              </p>
-
-              {/* 기본 가격 수정 */}
-              <div style={{ marginTop: "15px" }}>
-                <strong>기본 가격 수정:</strong>
-                <PriceInput
-                  type="number"
-                  defaultValue={productDetails.price}
-                  onBlur={(e) => {
-                    const newPrice = parseInt(e.target.value);
-                    if (newPrice !== parseInt(productDetails.price)) {
-                      updateBasicPrice(newPrice);
-                    }
-                  }}
-                />
-                원
-              </div>
-            </div>
-          )}
-
-          {/* 품목생성형 옵션 */}
-          {variants.length > 0 && (
-            <OptionList>
-              <h4>품목생성형 옵션 ({variants.length}개)</h4>
-              {variants.map((variant) => (
-                <OptionItem key={variant.variant_code}>
-                  <div>
-                    <strong>{variant.option_text}</strong>
-                    <br />
-                    <small>품목 코드: {variant.variant_code}</small>
-                  </div>
-                  <div>
-                    <PriceInput
-                      type="number"
-                      defaultValue={variant.price}
-                      onBlur={(e) => {
-                        const newPrice = parseInt(e.target.value);
-                        if (newPrice !== parseInt(variant.price)) {
-                          updateVariantPrice(variant.variant_code, newPrice);
-                        }
-                      }}
-                    />
-                    원
-                  </div>
-                </OptionItem>
-              ))}
-            </OptionList>
-          )}
-
-          {/* 상품연동형 옵션 */}
-          {options.length > 0 && (
-            <OptionList>
-              <h4>상품연동형 옵션 ({options.length}개)</h4>
-              {options.map((option) => (
-                <div key={option.option_no}>
-                  <h5>{option.option_name}</h5>
-                  {option.option_value.map((value, index) => (
-                    <OptionItem key={index}>
-                      <div>
-                        <strong>{value.option_text}</strong>
-                      </div>
-                      <div>
-                        추가금액:
-                        <PriceInput
-                          type="number"
-                          defaultValue={value.additional_amount || 0}
-                          onBlur={(e) => {
-                            const newAmount = parseInt(e.target.value);
-                            const updatedValues = [...option.option_value];
-                            updatedValues[index].additional_amount = newAmount;
-                            updateOptionPrice(option.option_no, updatedValues);
-                          }}
-                        />
-                        원
-                      </div>
-                    </OptionItem>
-                  ))}
-                </div>
-              ))}
-            </OptionList>
-          )}
-        </Section>
+      {!isLoading && searchResults.length === 0 && searchQuery && !error && (
+        <ResultsSection>
+          <EmptyState>
+            <h3>검색 결과가 없습니다</h3>
+            <p>다른 검색어를 시도해보세요.</p>
+          </EmptyState>
+        </ResultsSection>
       )}
 
-      {loading && (
-        <div style={{ textAlign: "center", padding: "20px" }}>처리 중...</div>
+      {showDebug && debugInfo && (
+        <DebugPanel>
+          <pre>{debugInfo}</pre>
+          <div style={{ marginTop: "8px", fontSize: "10px", opacity: 0.7 }}>
+            Ctrl+D to toggle
+          </div>
+        </DebugPanel>
       )}
     </Container>
   );
 };
 
-export default SingleProductEditor;
+export default ProductSearchPage;
