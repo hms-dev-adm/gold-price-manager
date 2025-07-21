@@ -85,9 +85,9 @@ const TokenInfo = styled.div`
 
 //proxy
 const ResultBox = styled.div`
-  background: ${(props) => (props.success ? "#d4edda" : "#f8d7da")};
-  border: 1px solid ${(props) => (props.success ? "#c3e6cb" : "#f5c6cb")};
-  color: ${(props) => (props.success ? "#155724" : "#721c24")};
+  background: ${(props) => (props.$success ? "#d4edda" : "#f8d7da")};
+  border: 1px solid ${(props) => (props.$success ? "#c3e6cb" : "#f5c6cb")};
+  color: ${(props) => (props.$success ? "#155724" : "#721c24")};
   padding: 15px;
   border-radius: 4px;
   margin-top: 15px;
@@ -101,6 +101,8 @@ const DebugBox = styled.div`
   margin-top: 15px;
   font-family: monospace;
   font-size: 12px;
+  max-height: 300px;
+  overflow-y: auto;
 `;
 
 const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
@@ -112,14 +114,13 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
   const [debugInfo, setDebugInfo] = useState("");
   const [showDebug, setShowDebug] = useState(true);
 
+  const [isSuccess, setIsSuccess] = useState(false);
+
   useEffect(() => {
     if (initialCode && initialCode.trim()) {
       setAuthCode(initialCode);
-      // 자동으로 토큰 발급 시도하지 않고 사용자가 버튼 클릭하도록 함
-
       addDebugInfo(`초기 인증 코드 감지: ${initialCode.substring(0, 20)}...`);
     }
-    // 저장된 토큰 확인
     checkSavedToken();
   }, [initialCode]);
 
@@ -136,6 +137,7 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       setTokenData({
         access_token: savedToken,
         expires_at: new Date(parseInt(tokenExpires)),
+        scope: localStorage.getItem("cafe24_token_scope") || "N/A",
       });
       addDebugInfo("저장된 유효한 토큰 발견");
     }
@@ -153,25 +155,30 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
 
     try {
       const token = await getAccessTokenWithDebug(authCode.trim());
-      // setTokenData(token);
 
-      // 토큰 정보를 로컬 스토리지에 저장
       const expiresAt = Date.now() + token.expires_in * 1000;
+
       localStorage.setItem("cafe24_access_token", token.access_token);
+      localStorage.setItem("cafe24_token_expires", expiresAt.toString());
+
       if (token.refresh_token) {
         localStorage.setItem("cafe24_refresh_token", token.refresh_token);
       }
-      localStorage.setItem("cafe24_token_expires", expiresAt.toString());
+
       setTokenData({
         ...token,
         expires_at: new Date(expiresAt),
       });
 
-      addDebugInfo("토큰 저장 완료");
-      onTokenReceived && onTokenReceived(token);
+      addDebugInfo(" ✅ 토큰 저장 완료");
+
+      if (onTokenReceived) {
+        onTokenReceived(token);
+      }
     } catch (err) {
       setError(err.message);
-      addDebugInfo(`에러: ${err.message}`);
+      addDebugInfo(`❌: ${err.message}`);
+      setTokenData(null);
     } finally {
       setIsLoading(false);
     }
@@ -180,51 +187,47 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
   const getAccessTokenWithDebug = async (code) => {
     const clientId = process.env.REACT_APP_CAFE24_CLIENT_ID;
     const clientSecret = process.env.REACT_APP_CAFE24_CLIENT_SECRET;
-    const mallId = process.env.REACT_APP_CAFE24_MALL_ID;
     const redirectUri = process.env.REACT_APP_CAFE24_REDIRECT_URI;
 
+    //환경변수 확인
     if (!clientId || !clientSecret) {
-      throw new Error("클라이언트 ID 또는 시크릿이 설정되지 않았습니다.");
+      throw new Error(
+        "환경변수가 설정되지 않았습니다. CLIENT_ID 또는 CLIENT_SECRET을 확인하세요."
+      );
+    }
+    if (!redirectUri) {
+      throw new Error("REDIRECT_URI가 설정되지 않았습니다.");
     }
 
-    // 1. Base64 인코딩
+    // Base64 인코딩 !
     const authString = `${clientId}:${clientSecret}`;
     const base64Credentials = btoa(authString);
     addDebugInfo(
       `Base64 인코딩: ${authString} -> ${base64Credentials.substring(0, 30)}...`
     );
 
-    // 2. 요청 URL 구성
-    const tokenUrl = `/api/cafe24/api/v2/oauth/token`;
+    // 요청 URL
+    const tokenUrl = `/api/cafe24-token`;
     addDebugInfo(`요청 URL: ${tokenUrl}`);
 
-    // 3. 필수 파라미터 구성 (카페24 문서에 따라)
+    // ✅ 올바른 form-urlencoded 데이터 구성
     const formData = new URLSearchParams();
     formData.append("grant_type", "authorization_code");
     formData.append("code", code);
     formData.append("redirect_uri", redirectUri);
 
-    addDebugInfo(`요청 파라미터:`);
-    addDebugInfo(`- grant_type: authorization_code`);
-    addDebugInfo(`- code: ${code.substring(0, 20)}...`);
-    addDebugInfo(`- redirect_uri: ${redirectUri}`);
+    addDebugInfo(`📤 요청 데이터: ${formData.toString()}`);
+    addDebugInfo(`📤 Content-Type: application/x-www-form-urlencoded`);
 
-    // 4. 헤더 구성
-    const headers = {
-      Authorization: `Basic ${base64Credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    };
-    addDebugInfo(`요청 헤더:`);
-    addDebugInfo(
-      `- Authorization: Basic ${base64Credentials.substring(0, 30)}...`
-    );
-    addDebugInfo(`- Content-Type: application/x-www-form-urlencoded`);
     try {
       addDebugInfo("토큰 요청 전송 중...");
 
       const response = await fetch(tokenUrl, {
         method: "POST",
-        headers: headers,
+        headers: {
+          Authorization: `Basic ${base64Credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded", // ✅ 일관된 헤더
+        },
         body: formData.toString(),
       });
 
@@ -233,31 +236,51 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       const responseText = await response.text();
       addDebugInfo(`응답 내용: ${responseText}`);
 
+      //Json 파싱 시도
       let data;
       try {
         data = JSON.parse(responseText);
       } catch (parseError) {
-        addDebugInfo(`JSON 파싱 실패: ${parseError.message}`);
+        addDebugInfo(`JSON ❌: ${parseError.message}`);
         throw new Error(`응답 파싱 실패: ${responseText}`);
       }
 
+      //에러 응답처리
       if (!response.ok) {
-        addDebugInfo(`API 에러: ${JSON.stringify(data, null, 2)}`);
-        throw new Error(
-          `토큰 발급 실패 (${response.status}): ${
-            data.error_description || data.error || "알 수 없는 오류"
-          }`
+        addDebugInfo(
+          `❌ API 에러 (${response.status}): ${JSON.stringify(data, null, 2)}`
         );
-      }
 
+        const errorMessage =
+          data.error_description ||
+          data.error ||
+          data.message ||
+          `HTTP ${response.status} 에러`;
+
+        throw new Error(`토큰 발급 실패: ${errorMessage}`);
+      }
+      // ✅ 성공 응답 처리
       addDebugInfo(`토큰 발급 성공!`);
       addDebugInfo(`- 액세스 토큰: ${data.access_token.substring(0, 30)}...`);
       addDebugInfo(`- 만료 시간: ${data.expires_in}초`);
       addDebugInfo(`- 권한: ${data.scope || "N/A"}`);
 
+      if (data.refresh_token) {
+        addDebugInfo(
+          `- 리프레시 토큰: ${data.refresh_token.substring(0, 30)}...`
+        );
+      }
+
       return data;
     } catch (fetchError) {
       addDebugInfo(`네트워크 에러: ${fetchError.message}`);
+      // ✅ 구체적인 에러 메시지 제공
+      if (fetchError.message.includes("Failed to fetch")) {
+        throw new Error(
+          "서버에 연결할 수 없습니다. Express 서버(localhost:3001)가 실행 중인지 확인하세요."
+        );
+      }
+
       throw fetchError;
     }
   };
@@ -277,20 +300,19 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       const clientSecret = process.env.REACT_APP_CAFE24_CLIENT_SECRET;
       const base64Credentials = btoa(`${clientId}:${clientSecret}`);
 
-      const tokenUrl = "/api/cafe24/api/v2/oauth/token";
+      const tokenUrl = "/api/cafe24-token";
 
       const formData = new URLSearchParams();
       formData.append("grant_type", "refresh_token");
       formData.append("refresh_token", refreshToken);
 
-      setDebugInfo((prev) => prev + `갱신 요청: ${formData.toString()}\n`);
       addDebugInfo(`refresh_token: ${refreshToken.substring(0, 20)}...`);
 
       const response = await fetch(tokenUrl, {
         method: "POST",
         headers: {
           Authorization: `Basic ${base64Credentials}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/x-www-form-urlencoded", // ✅ 수정됨
         },
         body: formData.toString(),
       });
@@ -301,11 +323,9 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       const data = JSON.parse(responseText);
 
       if (!response.ok) {
-        throw new Error(
-          `토큰 갱신 실패: ${
-            data.error_description || data.error || response.status
-          }`
-        );
+        const errorMessage =
+          data.error_description || data.error || `HTTP ${response.status}`;
+        throw new Error(`토큰 갱신 실패: ${errorMessage}`);
       }
 
       // 새 토큰 저장
@@ -313,15 +333,14 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
       localStorage.setItem("cafe24_access_token", data.access_token);
       localStorage.setItem("cafe24_token_expires", expiresAt.toString());
 
-      setTokenData({
-        ...data,
-        expires_at: new Date(expiresAt),
-      });
+      if (data.refresh_token) {
+        localStorage.setItem("cafe24_refresh_token", data.refresh_token);
+      }
 
-      setDebugInfo((prev) => prev + "토큰 갱신 성공!\n");
+      addDebugInfo("✅ 토큰 갱신 성공!");
     } catch (error) {
       setError(error.message);
-      setDebugInfo((prev) => prev + `갱신 에러: ${error.message}\n`);
+      addDebugInfo(`❌ 갱신 에러: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -331,15 +350,33 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
     localStorage.removeItem("cafe24_access_token");
     localStorage.removeItem("cafe24_refresh_token");
     localStorage.removeItem("cafe24_token_expires");
+    localStorage.removeItem("cafe24_token_scope");
+
     setTokenData(null);
     setAuthCode("");
     setError("");
-    setDebugInfo("");
+    setDebugInfo("🗑️ 토큰 데이터 초기화 완료\n");
+  };
+
+  // ✅ 토큰 만료 시간 계산
+  const getTimeRemaining = () => {
+    if (!tokenData?.expires_at) return null;
+
+    const now = Date.now();
+    const expiresAt = tokenData.expires_at.getTime();
+    const remaining = expiresAt - now;
+
+    if (remaining <= 0) return "만료됨";
+
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}시간 ${minutes}분 남음`;
   };
 
   return (
     <AuthContainer>
-      <h3>🔐 카페24 인증 코드 입력 v2.3 정책준수테스트</h3>
+      <h3>🔐 카페24 인증 코드 입력 v2.4</h3>
 
       {!tokenData ? (
         <div>
@@ -360,7 +397,7 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
         </div>
       ) : (
         <div>
-          <ResultBox success={true}>
+          <ResultBox $success={true}>
             <h4>✅ 토큰 발급 성공!</h4>
             <p>
               <strong>액세스 토큰:</strong>{" "}
@@ -371,45 +408,78 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
               {tokenData.expires_at?.toLocaleString()}
             </p>
             <p>
+              <strong>남은 시간:</strong> {getTimeRemaining()}
+            </p>
+            <p>
               <strong>권한:</strong> {tokenData.scope}
             </p>
           </ResultBox>
 
           <div style={{ marginTop: "15px" }}>
             <Button onClick={handleRefreshToken} disabled={isLoading}>
-              {isLoading ? "갱신 중..." : "refresh_token으로 갱신"}
+              {isLoading ? "갱신 중..." : "🔄 토큰 갱신"}
             </Button>
             <Button variant="danger" onClick={clearTokenData}>
-              초기화
+              🗑️ 토큰 초기화
             </Button>
           </div>
         </div>
       )}
 
       {error && (
-        <ResultBox success={false}>
+        <ResultBox $success={false}>
           <h4>❌ 오류 발생</h4>
           <p>{error}</p>
+          <details style={{ marginTop: "10px" }}>
+            <summary>문제 해결 방법</summary>
+            <ul style={{ margin: "10px 0", paddingLeft: "20px" }}>
+              <li>Express 서버가 실행 중인지 확인 (node server.js)</li>
+              <li>환경변수가 올바르게 설정되었는지 확인</li>
+              <li>인증 코드가 1분 내에 사용되었는지 확인</li>
+              <li>redirect_uri가 카페24 앱 설정과 일치하는지 확인</li>
+            </ul>
+          </details>
         </ResultBox>
       )}
 
       {/* 디버그 정보 */}
       <div style={{ marginTop: "20px" }}>
         <Button
+          variant="secondary"
           onClick={() => setShowDebug(!showDebug)}
-          style={{
-            background: "#6c757d",
-            fontSize: "14px",
-            padding: "8px 16px",
-          }}
+          style={{ fontSize: "14px", padding: "8px 16px" }}
         >
           디버그 정보 {showDebug ? "숨기기" : "보기"}
         </Button>
 
         {showDebug && debugInfo && (
           <DebugBox>
-            <h5>🔍 요청/응답 디버그 정보</h5>
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{debugInfo}</pre>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "10px",
+              }}
+            >
+              <h5 style={{ margin: 0 }}>🔍 요청/응답 디버그 정보</h5>
+              <button
+                onClick={() => setDebugInfo("")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                }}
+              >
+                🗑️ 로그 지우기
+              </button>
+            </div>
+            <pre
+              style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: "11px" }}
+            >
+              {debugInfo}
+            </pre>
           </DebugBox>
         )}
       </div>

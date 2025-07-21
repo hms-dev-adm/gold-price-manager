@@ -214,6 +214,8 @@ const AuthPage = () => {
 
   const getAccessToken = async (code) => {
     try {
+      console.log("토큰 발급 시도:", code.substring(0, 10) + "...");
+
       const response = await fetch("/api/cafe24-token", {
         method: "POST",
         headers: {
@@ -226,14 +228,27 @@ const AuthPage = () => {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      console.log("응답 상태:", response.status);
+      console.log("응답 헤더:", response.headers.get("content-type"));
+
+      // 응답이 JSON인지 확인
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const textResponse = await response.text();
+        console.error("JSON이 아닌 응답 받음:", textResponse.substring(0, 500));
         throw new Error(
-          `토큰 발급 실패: ${errorData.error || response.status}`
+          `서버가 HTML 에러 페이지를 반환했습니다. 상태: ${response.status}`
         );
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log("파싱된 응답:", data);
+
+      if (!response.ok) {
+        throw new Error(`토큰 발급 실패: ${data.error || response.status}`);
+      }
+
+      return data;
     } catch (error) {
       console.error("토큰 발급 오류:", error);
       throw error;

@@ -131,6 +131,7 @@ export default async function handler(req, res) {
       headers: {
         Authorization: `Basic ${credentials}`,
         "Content-Type": "application/x-www-form-urlencoded",
+        "X-Cafe24-Api-Version": "2024-12-01",
       },
       body: formData.toString(),
     });

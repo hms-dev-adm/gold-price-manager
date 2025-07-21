@@ -1,8 +1,8 @@
 {
   "name": "gold-price-manager",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "private": true,
-  "proxy": "https://gongbang301.cafe24api.com",
+  "proxy": "http://localhost:3001",
   "dependencies": {
     "@babel/cli": "^7.28.0",
     "@babel/preset-env": "^7.28.0",
