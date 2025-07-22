@@ -260,11 +260,26 @@ const AuthCodeInput = ({ initialCode, onTokenReceived }) => {
         throw new Error(`토큰 발급 실패: ${errorMessage}`);
       }
       // ✅ 성공 응답 처리
-      addDebugInfo(`토큰 발급 성공!`);
-      addDebugInfo(`- 액세스 토큰: ${data.access_token.substring(0, 30)}...`);
-      addDebugInfo(`- 만료 시간: ${data.expires_in}초`);
-      addDebugInfo(`- 권한: ${data.scope || "N/A"}`);
+      if (response.ok) {
+        const data = JSON.parse(responseText);
 
+        // ✅ scope 정보 확인 및 저장
+        console.log("토큰 발급 응답:", data);
+        console.log("받은 권한(scope):", data.scope);
+
+        // scope가 응답에 포함되어 있다면 저장
+        if (data.scope) {
+          localStorage.setItem("cafe24_token_scope", data.scope);
+        } else {
+          console.warn("⚠️ 응답에 scope 정보가 없습니다");
+          localStorage.setItem("cafe24_token_scope", "unknown");
+        }
+
+        addDebugInfo(`✅ 토큰 발급 성공!`);
+        addDebugInfo(`- 액세스 토큰: ${data.access_token.substring(0, 30)}...`);
+        addDebugInfo(`- 만료 시간: ${data.expires_in}초`);
+        addDebugInfo(`- 권한(scope): ${data.scope || "N/A"}`);
+      }
       if (data.refresh_token) {
         addDebugInfo(
           `- 리프레시 토큰: ${data.refresh_token.substring(0, 30)}...`

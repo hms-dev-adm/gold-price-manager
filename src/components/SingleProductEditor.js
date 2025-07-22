@@ -302,12 +302,29 @@ const ProductSearchPage = () => {
 
       addDebugInfo(`Response: ${response.status}`);
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        // 에러 상세 정보 로깅
+        console.error("API 에러 상세:", data);
+        addDebugInfo(`Error details: ${JSON.stringify(data)}`);
+
+        // 구체적인 에러 메시지 생성
+        let errorMessage =
+          data.message || data.error || `HTTP ${response.status}`;
+
+        // 카페24 API 특정 에러 처리
+        if (data.code) {
+          errorMessage += ` (코드: ${data.code})`;
+        }
+
+        if (data.details?.error?.message) {
+          errorMessage = data.details.error.message;
+        }
+
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
       addDebugInfo(`Found: ${data.products?.length || 0} products`);
 
       setSearchResults(data.products || []);
@@ -327,6 +344,7 @@ const ProductSearchPage = () => {
         console.groupEnd();
       }
     } catch (err) {
+      console.error("검색 실패:", err);
       setError(err.message);
       addDebugInfo(`Error: ${err.message}`);
     } finally {

@@ -144,30 +144,15 @@ app.listen(PORT, () => {
 
 // ------------------------ * 상품 API endpoint * ------------------------ //
 
+// server.js - 카페24 API 수정 (API 버전 제거)
 app.post("/api/cafe24-products", async (req, res) => {
   try {
-    console.log("=== 상품 API 요청 ===");
-    console.log("요청 본문:", JSON.stringify(req.body, null, 2));
+    console.log("\n=== 상품 API 요청 ===");
+    console.log("요청 본문:", req.body);
 
     const { action, searchType, searchQuery, productNo } = req.body;
 
-    // 디버깅을 위한 상세 로그
-    console.log("파싱된 값:");
-    console.log("- action:", action, typeof action);
-    console.log("- searchType:", searchType);
-    console.log("- searchQuery:", searchQuery);
-    console.log("- productNo:", productNo);
-
-    // 액션 검증
-    if (!action || typeof action !== "string") {
-      return res.status(400).json({
-        error: "action이 필요합니다.",
-        received: { action, type: typeof action },
-        body: req.body,
-      });
-    }
-
-    // Authorization 헤더에서 토큰 추출
+    // 토큰 확인
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7)
@@ -177,169 +162,120 @@ app.post("/api/cafe24-products", async (req, res) => {
       return res.status(401).json({ error: "액세스 토큰이 필요합니다." });
     }
 
-    const mallId = process.env.REACT_APP_CAFE24_MALL_ID;
+    const mallId = process.env.REACT_APP_CAFE24_MALL_ID || "gongbang301";
 
-    if (!mallId) {
-      return res.status(500).json({ error: "MALL_ID가 설정되지 않았습니다." });
-    }
+    console.log("Mall ID:", mallId);
+    console.log("Action:", action);
 
     let apiUrl;
-    let method = "POST";
-    let bodyData = null;
-    let apiParams = "?shop_no=1";
+    let fetchOptions;
 
     switch (action) {
       case "searchProducts":
-        console.log("📦 상품 검색 요청");
+        // 상품 목록 조회
+        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=100`;
 
-        //get
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products`;
+        console.log("🌐 상품 검색 URL:", apiUrl);
 
-        let params = new URLSearchParams();
-        params.append("shop_no", "1");
-        params.append("limit", "100"); // 더 많은 검색 결과
-
-        // 검색 조건 추가
-        if (searchType && searchQuery) {
-          if (searchType === "name") {
-            params.append("product_name", searchQuery);
-          } else if (searchType === "code") {
-            params.append("product_code", searchQuery);
-          } else if (searchType === "id") {
-            params.append("product_no", searchQuery);
-          }
-        }
-
-        // GET 요청이므로 파라미터를 URL에 추가
-        apiUrl = `${apiUrl}?${params.toString()}`;
-        console.log("🌐 GET 요청 URL:", apiUrl);
+        fetchOptions = {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            // X-Cafe24-Api-Version 헤더 제거 (기본 버전 사용)
+          },
+        };
         break;
 
       case "getProduct":
         if (!productNo) {
           return res.status(400).json({ error: "productNo가 필요합니다." });
         }
-        console.log("📋 상품 상세 조회:", productNo);
+
         apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}?shop_no=1`;
-        break;
 
-      case "updateProduct":
-        if (!productNo) {
-          return res.status(400).json({ error: "productNo가 필요합니다." });
-        }
-        console.log("✏️ 상품 수정:", productNo);
-        method = "PUT";
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`;
-        bodyData = req.body.updateData; // 수정할 데이터
-        break;
-
-      case "getVariants":
-        if (!productNo) {
-          return res.status(400).json({ error: "productNo가 필요합니다." });
-        }
-        console.log("🔧 상품 옵션(variants) 조회:", productNo);
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants?shop_no=1`;
-        break;
-
-      case "getOptions":
-        if (!productNo) {
-          return res.status(400).json({ error: "productNo가 필요합니다." });
-        }
-        console.log("⚙️ 상품 옵션(options) 조회:", productNo);
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options?shop_no=1`;
+        fetchOptions = {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        };
         break;
 
       default:
-        console.log("❌ 지원하지 않는 액션:", action);
         return res.status(400).json({
           error: "지원하지 않는 액션입니다.",
-          supportedActions: [
-            "searchProducts",
-            "getProduct",
-            "updateProduct",
-            "getVariants",
-            "getOptions",
-          ],
           receivedAction: action,
         });
     }
 
-    console.log(`🚀 카페24 API ${method} 요청:`, apiUrl);
+    console.log("📡 카페24 API 호출 중...");
 
-    // 카페24 API 요청 옵션
-    const fetchOptions = {
-      method: method,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-Cafe24-Api-Version": "2024-12-01", // API 버전 명시
-      },
-    };
-
-    // PUT/POST 요청인 경우에만 body 추가
-    if (method !== "GET" && bodyData) {
-      fetchOptions.body = JSON.stringify(bodyData);
-    }
-
-    // 카페24 API 요청
+    // 카페24 API 호출
     const response = await fetch(apiUrl, fetchOptions);
 
-    console.log("카페24 API 응답 상태:", response.status);
+    console.log("📥 응답 상태:", response.status);
 
     const responseText = await response.text();
-    console.log("📄 응답 내용:", responseText.substring(0, 200));
+    console.log("📄 응답 길이:", responseText.length, "bytes");
 
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (parseError) {
       console.error("JSON 파싱 실패:", parseError);
+      console.log("응답 내용:", responseText.substring(0, 500));
+
       return res.status(500).json({
         error: "API 응답 파싱 실패",
-        responseText: responseText.substring(0, 300),
-        parseError: parseError.message,
+        responseText: responseText.substring(0, 500),
       });
     }
-    // 카페24 API 에러 처리
+
+    // 에러 체크
     if (!response.ok) {
-      console.error("❌ 카페24 API 에러:", data);
-
-      // 카페24 API의 구체적인 에러 메시지 전달
-      const errorMessage =
-        data.error?.message || data.message || "알 수 없는 오류";
-
+      console.error("카페24 API 에러:", data);
       return res.status(response.status).json({
         error: "카페24 API 오류",
-        message: errorMessage,
-        code: data.error?.code,
         details: data,
       });
     }
 
-    console.log("✅ 상품 API 성공");
+    // searchProducts인 경우 클라이언트 사이드 필터링
+    if (action === "searchProducts" && searchQuery && data.products) {
+      const originalCount = data.products.length;
 
-    // 검색 결과 로깅
-    if (action === "searchProducts" && data.products) {
-      console.log(`📦 검색 결과: ${data.products.length}개 상품 발견`);
-      if (data.products.length > 0) {
-        console.log("첫 3개 상품:");
-        data.products.slice(0, 3).forEach((product, index) => {
-          console.log(
-            `${index + 1}. [${product.product_no}] ${product.product_name} - ${
-              product.price
-            }원`
-          );
-        });
-      }
+      data.products = data.products.filter((product) => {
+        if (searchType === "name") {
+          return product.product_name
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase());
+        } else if (searchType === "code") {
+          return product.product_code
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase());
+        } else if (searchType === "id") {
+          return product.product_no?.toString() === searchQuery;
+        }
+        return true;
+      });
+
+      console.log(`✅ 필터링: ${originalCount}개 → ${data.products.length}개`);
+    }
+
+    console.log("✅ 성공적으로 완료");
+
+    if (action === "searchProducts") {
+      console.log(`상품 수: ${data.products?.length || 0}개`);
     }
 
     res.json(data);
   } catch (error) {
-    console.error("❌ 상품 API 서버 에러:", error);
+    console.error("❌ 서버 에러:", error);
     res.status(500).json({
-      error: "서버 오류",
+      error: "서버 내부 오류",
       message: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 });
