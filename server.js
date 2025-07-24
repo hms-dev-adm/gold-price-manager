@@ -145,12 +145,14 @@ app.listen(PORT, () => {
 // ------------------------ * 상품 API endpoint * ------------------------ //
 
 // server.js - 카페24 API 수정 (API 버전 제거)
+// server.js의 상품 API 부분 전체를 다시 수정 (7.24)
 app.post("/api/cafe24-products", async (req, res) => {
   try {
     console.log("\n=== 상품 API 요청 ===");
-    console.log("요청 본문:", req.body);
+    console.log("요청 본문:", JSON.stringify(req.body, null, 2));
 
-    const { action, searchType, searchQuery, productNo } = req.body;
+    const { action, searchType, searchQuery, productNo, price, variantNo } =
+      req.body;
 
     // 토큰 확인
     const authHeader = req.headers.authorization;
@@ -167,40 +169,69 @@ app.post("/api/cafe24-products", async (req, res) => {
     console.log("Mall ID:", mallId);
     console.log("Action:", action);
 
+    // let으로 변경하여 재할당 가능하게 함
     let apiUrl;
-    let fetchOptions;
+    let method = "GET";
+    let requestBody = null;
 
     switch (action) {
       case "searchProducts":
-        // 상품 목록 조회
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=100`;
-
-        console.log("🌐 상품 검색 URL:", apiUrl);
-
-        fetchOptions = {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            // X-Cafe24-Api-Version 헤더 제거 (기본 버전 사용)
-          },
-        };
+        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=100&embed=options`;
         break;
 
       case "getProduct":
         if (!productNo) {
           return res.status(400).json({ error: "productNo가 필요합니다." });
         }
+        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}?shop_no=1&embed=options`;
+        break;
 
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}?shop_no=1`;
+      case "updateProductPrice":
+        if (!productNo) {
+          return res.status(400).json({ error: "productNo가 필요합니다." });
+        }
 
-        fetchOptions = {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        };
+        console.log("💰 가격 수정 요청:", { productNo, price, variantNo });
+
+        if (!price || price < 0) {
+          return res.status(400).json({ error: "유효한 가격을 입력해주세요." });
+        }
+
+        method = "PUT";
+
+        if (variantNo) {
+          // Variant 가격 수정은 지원하지 않는 경우가 많음
+          return res.status(400).json({
+            error: "옵션 가격 수정은 카페24 API에서 제한적으로 지원됩니다.",
+            message: "기본 상품 가격만 수정 가능합니다.",
+          });
+        } else {
+          // 기본 상품 가격 수정
+          apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`;
+
+          // 카페24 API 문서에 따른 정확한 형식
+          requestBody = {
+            shop_no: 1, // 숫자로
+            product: {
+              // request가 아닌 product
+              price: price.toString(), // 가격만 전송
+            },
+          };
+        }
+        break;
+
+      case "getVariants":
+        if (!productNo) {
+          return res.status(400).json({ error: "productNo가 필요합니다." });
+        }
+        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants?shop_no=1`;
+        break;
+
+      case "getOptions":
+        if (!productNo) {
+          return res.status(400).json({ error: "productNo가 필요합니다." });
+        }
+        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options?shop_no=1`;
         break;
 
       default:
@@ -210,7 +241,24 @@ app.post("/api/cafe24-products", async (req, res) => {
         });
     }
 
-    console.log("📡 카페24 API 호출 중...");
+    console.log(`🚀 카페24 API 호출: ${method} ${apiUrl}`);
+    if (requestBody) {
+      console.log("📤 요청 데이터:", JSON.stringify(requestBody, null, 2));
+    }
+
+    // fetch 옵션 설정
+    const fetchOptions = {
+      method: method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    };
+
+    // PUT/POST 요청인 경우에만 body 추가
+    if (method !== "GET" && requestBody) {
+      fetchOptions.body = JSON.stringify(requestBody);
+    }
 
     // 카페24 API 호출
     const response = await fetch(apiUrl, fetchOptions);
@@ -218,15 +266,13 @@ app.post("/api/cafe24-products", async (req, res) => {
     console.log("📥 응답 상태:", response.status);
 
     const responseText = await response.text();
-    console.log("📄 응답 길이:", responseText.length, "bytes");
+    console.log("📄 응답 내용:", responseText.substring(0, 500));
 
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (parseError) {
       console.error("JSON 파싱 실패:", parseError);
-      console.log("응답 내용:", responseText.substring(0, 500));
-
       return res.status(500).json({
         error: "API 응답 파싱 실패",
         responseText: responseText.substring(0, 500),
@@ -235,7 +281,18 @@ app.post("/api/cafe24-products", async (req, res) => {
 
     // 에러 체크
     if (!response.ok) {
-      console.error("카페24 API 에러:", data);
+      console.error("❌ 카페24 API 에러:", data);
+
+      // 400 에러인 경우 더 자세한 정보 제공
+      if (response.status === 400) {
+        return res.status(400).json({
+          error: "카페24 API 요청 형식 오류",
+          message: data.error?.message || "요청 파라미터를 확인해주세요.",
+          details: data,
+          tip: "카페24 API는 가격 수정 시 추가 필드가 필요할 수 있습니다.",
+        });
+      }
+
       return res.status(response.status).json({
         error: "카페24 API 오류",
         details: data,
@@ -257,6 +314,10 @@ app.post("/api/cafe24-products", async (req, res) => {
             .includes(searchQuery.toLowerCase());
         } else if (searchType === "id") {
           return product.product_no?.toString() === searchQuery;
+        } else if (searchType === "model") {
+          return product.model_name
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase());
         }
         return true;
       });
@@ -265,11 +326,6 @@ app.post("/api/cafe24-products", async (req, res) => {
     }
 
     console.log("✅ 성공적으로 완료");
-
-    if (action === "searchProducts") {
-      console.log(`상품 수: ${data.products?.length || 0}개`);
-    }
-
     res.json(data);
   } catch (error) {
     console.error("❌ 서버 에러:", error);
@@ -280,44 +336,86 @@ app.post("/api/cafe24-products", async (req, res) => {
   }
 });
 
-// 상품 API 테스트 엔드포인트
-app.get("/api/cafe24-products/test", async (req, res) => {
+// 간단한 가격 수정 테스트 엔드포인트
+app.post("/api/cafe24-price-test", async (req, res) => {
   try {
+    const { productNo, price } = req.body;
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith("Bearer ")
       ? authHeader.slice(7)
       : authHeader;
 
     if (!accessToken) {
-      return res.status(401).json({ error: "토큰을 헤더에 포함해주세요." });
+      return res.status(401).json({ error: "토큰이 필요합니다." });
     }
 
-    const mallId = process.env.REACT_APP_CAFE24_MALL_ID;
-    const testUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=5`;
+    const mallId = process.env.REACT_APP_CAFE24_MALL_ID || "gongbang301";
 
-    console.log("🧪 테스트 API 호출:", testUrl);
-
-    const response = await fetch(testUrl, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-Cafe24-Api-Version": "2024-12-01",
+    // 다양한 형식으로 시도
+    const formats = [
+      // 형식 1: product 객체
+      {
+        shop_no: 1,
+        product: {
+          price: price.toString(),
+        },
       },
-    });
+      // 형식 2: request 객체
+      {
+        shop_no: 1,
+        request: {
+          price: price.toString(),
+        },
+      },
+      // 형식 3: 직접 필드
+      {
+        shop_no: 1,
+        price: price.toString(),
+      },
+      // 형식 4: fields 파라미터 사용
+      {
+        shop_no: 1,
+        fields: ["price"],
+        product: {
+          price: price.toString(),
+        },
+      },
+    ];
 
-    const data = await response.json();
+    for (let i = 0; i < formats.length; i++) {
+      console.log(`\n시도 ${i + 1}:`, JSON.stringify(formats[i], null, 2));
 
-    res.json({
-      message: "테스트 성공",
-      status: response.status,
-      productCount: data.products?.length || 0,
-      firstProduct: data.products?.[0] || null,
+      const response = await fetch(
+        `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formats[i]),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return res.json({
+          success: true,
+          format: i + 1,
+          data: data,
+        });
+      }
+
+      console.log(`형식 ${i + 1} 실패:`, data.error?.message);
+    }
+
+    res.status(400).json({
+      error: "모든 형식 시도 실패",
+      message: "카페24 API 문서를 확인해주세요.",
     });
   } catch (error) {
-    res.status(500).json({
-      error: "테스트 실패",
-      message: error.message,
-    });
+    console.error("테스트 실패:", error);
+    res.status(500).json({ error: error.message });
   }
 });

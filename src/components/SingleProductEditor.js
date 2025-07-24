@@ -127,6 +127,29 @@ const ErrorMessage = styled.div`
   margin-bottom: 16px;
 `;
 
+const ProductCard = styled.div`
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: #999;
+  }
+`;
+
+const ProductHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+`;
+
+const ProductInfo = styled.div`
+  flex: 1;
+`;
+
 const ProductTable = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -175,6 +198,23 @@ const Price = styled.div`
   text-align: right;
 `;
 
+const ProductMeta = styled.div`
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+`;
+
+const MetaItem = styled.div`
+  font-size: 13px;
+  color: #666;
+
+  strong {
+    color: #333;
+    font-weight: 500;
+  }
+`;
+
 const Badge = styled.span`
   display: inline-block;
   padding: 2px 8px;
@@ -183,6 +223,11 @@ const Badge = styled.span`
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
+`;
+
+const ProductActions = styled.div`
+  display: flex;
+  gap: 8px;
 `;
 
 const ActionButton = styled.button`
@@ -240,19 +285,273 @@ const DebugPanel = styled.div`
   }
 `;
 
+// 옵션 스타일 추가
+const OptionsSection = styled.div`
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e5e5;
+`;
+
+const OptionGroup = styled.div`
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const OptionTitle = styled.h4`
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #333;
+`;
+
+const OptionsList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const OptionItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  font-size: 13px;
+`;
+
+const OptionName = styled.span`
+  flex: 1;
+  color: #333;
+`;
+
+const OptionPrice = styled.span`
+  font-weight: 500;
+  color: #000;
+  margin-left: 16px;
+`;
+
+const PriceEditForm = styled.form`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const PriceInput = styled.input`
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: right;
+
+  &:focus {
+    outline: none;
+    border-color: #000;
+  }
+`;
+
+const SuccessMessage = styled.div`
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-top: 8px;
+`;
+
+const LoadingSpinner = styled.span`
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 8px;
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
 const ProductSearchPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchType, setSearchType] = useState("name");
+  const [searchType, setSearchType] = useState("model"); //검색 기본값
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [debugInfo, setDebugInfo] = useState("");
-  const [showDebug, setShowDebug] = useState(false);
 
-  const addDebugInfo = (message) => {
-    const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
-    setDebugInfo((prev) => `[${timestamp}] ${message}\n${prev}`);
-    console.log(`[ProductSearch] ${message}`);
+  const [expandedProducts, setExpandedProducts] = useState({});
+  const [productOptions, setProductOptions] = useState({});
+  const [editingPrices, setEditingPrices] = useState({});
+
+  //가격 업데이트 State
+  const [savingPrices, setSavingPrices] = useState({});
+  const [priceUpdateSuccess, setPriceUpdateSuccess] = useState({});
+
+  //상품 옵션 정보 로드
+  const loadProductOptions = async (productNo) => {
+    try {
+      const accessToken = localStorage.getItem("cafe24_access_token");
+
+      //variants 조회 (품목형 옵션)
+      const variantResponse = await fetch("/api/cafe24-products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: "getVariants",
+          productNo: productNo,
+        }),
+      });
+
+      if (variantResponse.ok) {
+        const variantsData = await variantResponse.json();
+
+        setProductOptions((prev) => ({
+          ...prev,
+          [productNo]: {
+            ...prev[productNo],
+            variants: variantsData.variants || [],
+          },
+        }));
+      }
+    } catch (error) {
+      console.error("옵션 로드 실패 : ", error);
+    }
+  };
+
+  // 옵션 토글
+  const toggleProductOptions = async (productNo) => {
+    const isExpanded = expandedProducts[productNo];
+
+    if (!isExpanded && !productOptions[productNo]) {
+      await loadProductOptions(productNo);
+    }
+
+    setExpandedProducts((prev) => ({
+      ...prev,
+      [productNo]: !isExpanded,
+    }));
+  };
+
+  // 가격 수정 시작
+  const startPriceEdit = (productNo, variantNo, currentPrice) => {
+    const key = variantNo ? `${productNo}_${variantNo}` : productNo;
+    setEditingPrices((prev) => ({
+      ...prev,
+      [key]: currentPrice || "0",
+    }));
+    // 성공 메시지 제거
+    setPriceUpdateSuccess((prev) => {
+      const newSuccess = { ...prev };
+      delete newSuccess[key];
+      return newSuccess;
+    });
+  };
+
+  // 가격 수정 취소
+  const cancelPriceEdit = (productNo, variantNo) => {
+    const key = variantNo ? `${productNo}_${variantNo}` : productNo;
+    setEditingPrices((prev) => {
+      const newPrices = { ...prev };
+      delete newPrices[key];
+      return newPrices;
+    });
+  };
+
+  // 가격 저장
+  const savePriceEdit = async (productNo, variantNo) => {
+    const key = variantNo ? `${productNo}_${variantNo}` : productNo;
+    const newPrice = editingPrices[key];
+
+    if (!newPrice || isNaN(newPrice) || parseFloat(newPrice) < 0) {
+      alert("유효한 가격을 입력해주세요.");
+      return;
+    }
+
+    // 옵션 가격 수정 제한 알림
+    if (variantNo) {
+      alert(
+        "옵션 가격 수정은 카페24 API 제한으로 인해 지원되지 않습니다.\n기본 상품 가격만 수정 가능합니다."
+      );
+      cancelPriceEdit(productNo, variantNo);
+      return;
+    }
+
+    setSavingPrices((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      const accessToken = localStorage.getItem("cafe24_access_token");
+
+      // 먼저 테스트 엔드포인트로 시도
+      console.log("가격 수정 테스트 시작...");
+
+      const testResponse = await fetch("/api/cafe24-price-test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          productNo: productNo,
+          price: newPrice,
+        }),
+      });
+
+      const testData = await testResponse.json();
+
+      if (testResponse.ok) {
+        console.log("✅ 가격 수정 성공! 사용된 형식:", testData.format);
+
+        // UI 업데이트
+        setSearchResults((prev) =>
+          prev.map((product) => {
+            if (product.product_no === productNo) {
+              return { ...product, price: newPrice };
+            }
+            return product;
+          })
+        );
+
+        cancelPriceEdit(productNo, variantNo);
+        setPriceUpdateSuccess((prev) => ({ ...prev, [key]: true }));
+
+        setTimeout(() => {
+          setPriceUpdateSuccess((prev) => {
+            const newSuccess = { ...prev };
+            delete newSuccess[key];
+            return newSuccess;
+          });
+        }, 3000);
+      } else {
+        throw new Error(testData.message || "가격 수정 실패");
+      }
+    } catch (error) {
+      console.error("가격 수정 실패:", error);
+      alert(
+        `가격 수정 실패: ${error.message}\n\n카페24 관리자 페이지에서 직접 수정하시거나,\nAPI 권한을 확인해주세요.`
+      );
+    } finally {
+      setSavingPrices((prev) => {
+        const newSaving = { ...prev };
+        delete newSaving[key];
+        return newSaving;
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -268,10 +567,10 @@ const ProductSearchPage = () => {
     setIsLoading(true);
     setError("");
     setSearchResults([]);
+    setExpandedProducts({});
+    setProductOptions({});
 
     try {
-      addDebugInfo(`Searching: ${searchQuery} (${searchType})`);
-
       const accessToken = localStorage.getItem("cafe24_access_token");
       const tokenExpires = localStorage.getItem("cafe24_token_expires");
 
@@ -289,8 +588,6 @@ const ProductSearchPage = () => {
         searchQuery: searchQuery.trim(),
       };
 
-      addDebugInfo(`Request: ${JSON.stringify(requestBody)}`);
-
       const response = await fetch("/api/cafe24-products", {
         method: "POST",
         headers: {
@@ -300,107 +597,86 @@ const ProductSearchPage = () => {
         body: JSON.stringify(requestBody),
       });
 
-      addDebugInfo(`Response: ${response.status}`);
-
-      const data = await response.json();
-
       if (!response.ok) {
-        // 에러 상세 정보 로깅
-        console.error("API 에러 상세:", data);
-        addDebugInfo(`Error details: ${JSON.stringify(data)}`);
-
-        // 구체적인 에러 메시지 생성
-        let errorMessage =
-          data.message || data.error || `HTTP ${response.status}`;
-
-        // 카페24 API 특정 에러 처리
-        if (data.code) {
-          errorMessage += ` (코드: ${data.code})`;
-        }
-
-        if (data.details?.error?.message) {
-          errorMessage = data.details.error.message;
-        }
-
-        throw new Error(errorMessage);
+        const errorData = await response.json();
+        throw new Error(
+          errorData.message || errorData.error || `HTTP ${response.status}`
+        );
       }
 
-      addDebugInfo(`Found: ${data.products?.length || 0} products`);
-
+      const data = await response.json();
       setSearchResults(data.products || []);
 
       // 콘솔에 상세 정보 출력
-      if (data.products?.length > 0) {
-        console.group("🔍 상품 검색 결과");
-        console.table(
-          data.products.map((p) => ({
-            번호: p.product_no,
-            상품명: p.product_name,
-            코드: p.product_code,
-            가격: p.price,
-            진열: p.display === "T" ? "진열함" : "진열안함",
-          }))
-        );
-        console.groupEnd();
-      }
+      // if (data.products?.length > 0) {
+      //   console.group("🔍 상품 검색 결과");
+      //   console.table(
+      //     data.products.map((p) => ({
+      //       번호: p.product_no,
+      //       상품명: p.product_name,
+      //       코드: p.product_code,
+      //       가격: p.price,
+      //       진열: p.display === "T" ? "진열함" : "진열안함",
+      //     }))
+      //   );
+      //   console.groupEnd();
+      // }
     } catch (err) {
-      console.error("검색 실패:", err);
       setError(err.message);
-      addDebugInfo(`Error: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleProductDetail = async (productNo) => {
-    try {
-      addDebugInfo(`Fetching details for product ${productNo}`);
+  // const handleProductDetail = async (productNo) => {
+  //   try {
+  //     addDebugInfo(`Fetching details for product ${productNo}`);
 
-      const accessToken = localStorage.getItem("cafe24_access_token");
+  //     const accessToken = localStorage.getItem("cafe24_access_token");
 
-      const response = await fetch("/api/cafe24-products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          action: "getProduct",
-          productNo: productNo,
-        }),
-      });
+  //     const response = await fetch("/api/cafe24-products", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${accessToken}`,
+  //       },
+  //       body: JSON.stringify({
+  //         action: "getProduct",
+  //         productNo: productNo,
+  //       }),
+  //     });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.group(`📋 상품 #${productNo} 상세 정보`);
-        console.log(data.product);
-        console.groupEnd();
-        addDebugInfo(`Product ${productNo} details loaded`);
-      }
-    } catch (error) {
-      addDebugInfo(`Error loading product ${productNo}: ${error.message}`);
-    }
-  };
+  //     if (response.ok) {
+  //       const data = await response.json();
+  //       console.group(`📋 상품 #${productNo} 상세 정보`);
+  //       console.log(data.product);
+  //       console.groupEnd();
+  //       addDebugInfo(`Product ${productNo} details loaded`);
+  //     }
+  //   } catch (error) {
+  //     addDebugInfo(`Error loading product ${productNo}: ${error.message}`);
+  //   }
+  // };
 
-  // 키보드 단축키 (디버그 패널 토글)
-  useEffect(() => {
-    // 토큰 정보 확인
-    console.log("Mall ID:", process.env.REACT_APP_CAFE24_MALL_ID);
-    console.log("Token Scope:", localStorage.getItem("cafe24_token_scope"));
-    console.log(
-      "Token Expires:",
-      new Date(parseInt(localStorage.getItem("cafe24_token_expires")))
-    );
+  // // 키보드 단축키 (디버그 패널 토글)
+  // useEffect(() => {
+  //   // 토큰 정보 확인
+  //   console.log("Mall ID:", process.env.REACT_APP_CAFE24_MALL_ID);
+  //   console.log("Token Scope:", localStorage.getItem("cafe24_token_scope"));
+  //   console.log(
+  //     "Token Expires:",
+  //     new Date(parseInt(localStorage.getItem("cafe24_token_expires")))
+  //   );
 
-    const handleKeyPress = (e) => {
-      if (e.ctrlKey && e.key === "d") {
-        e.preventDefault();
-        setShowDebug(!showDebug);
-      }
-    };
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [showDebug]);
+  //   const handleKeyPress = (e) => {
+  //     if (e.ctrlKey && e.key === "d") {
+  //       e.preventDefault();
+  //       setShowDebug(!showDebug);
+  //     }
+  //   };
+  //   window.addEventListener("keydown", handleKeyPress);
+  //   return () => window.removeEventListener("keydown", handleKeyPress);
+  // }, [showDebug]);
 
   return (
     <Container>
@@ -410,6 +686,16 @@ const ProductSearchPage = () => {
         <SectionTitle>상품 검색</SectionTitle>
 
         <SearchTypeGroup>
+          <RadioButton $checked={searchType === "model"}>
+            <input
+              type="radio"
+              name="searchType"
+              value="model"
+              checked={searchType === "model"}
+              onChange={(e) => setSearchType(e.target.value)}
+            />
+            모델번호
+          </RadioButton>
           <RadioButton $checked={searchType === "name"}>
             <input
               type="radio"
@@ -448,7 +734,9 @@ const ProductSearchPage = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={
-              searchType === "name"
+              searchType === "model"
+                ? "모델번호 입력 (부분 검색 가능)"
+                : searchType === "name"
                 ? "상품명 입력"
                 : searchType === "code"
                 ? "상품코드 입력"
@@ -468,57 +756,272 @@ const ProductSearchPage = () => {
         <ResultsSection>
           <SectionTitle>검색 결과 ({searchResults.length})</SectionTitle>
 
-          <ProductTable>
-            <TableHeader>
-              <tr>
-                <th style={{ width: "60px" }}>번호</th>
-                <th>상품명</th>
-                <th style={{ width: "100px" }}>가격</th>
-                <th style={{ width: "80px" }}>진열</th>
-                <th style={{ width: "80px" }}>옵션</th>
-                <th style={{ width: "100px" }}>액션</th>
-              </tr>
-            </TableHeader>
-            <TableBody>
-              {searchResults.map((product) => (
-                <tr key={product.product_no}>
-                  <td>{product.product_no}</td>
-                  <td>
-                    <ProductName>{product.product_name}</ProductName>
-                    {product.product_code && (
-                      <ProductCode>{product.product_code}</ProductCode>
-                    )}
-                  </td>
-                  <td>
-                    <Price>
+          {searchResults.map((product) => (
+            <ProductCard key={product.product_no}>
+              <ProductHeader>
+                <ProductInfo>
+                  <ProductName>{product.product_name}</ProductName>
+                  <ProductMeta>
+                    <MetaItem>
+                      <strong>상품번호:</strong> {product.product_no}
+                    </MetaItem>
+                    <MetaItem>
+                      <strong>모델번호:</strong> {product.model_name || "N/A"}
+                    </MetaItem>
+                    <MetaItem>
+                      <strong>상품코드:</strong> {product.product_code || "N/A"}
+                    </MetaItem>
+                    <MetaItem>
+                      <strong>판매가:</strong>{" "}
                       {parseInt(product.price || 0).toLocaleString()}원
-                    </Price>
-                  </td>
-                  <td>
-                    <Badge $active={product.display === "T"}>
-                      {product.display === "T" ? "진열" : "미진열"}
-                    </Badge>
-                  </td>
-                  <td>
-                    <Badge>
-                      {product.option_type === "T"
-                        ? "품목형"
-                        : product.option_type === "F"
-                        ? "연동형"
-                        : "없음"}
-                    </Badge>
-                  </td>
-                  <td>
-                    <ActionButton
-                      onClick={() => handleProductDetail(product.product_no)}
-                    >
-                      상세보기
-                    </ActionButton>
-                  </td>
-                </tr>
-              ))}
-            </TableBody>
-          </ProductTable>
+                    </MetaItem>
+                    <MetaItem>
+                      <Badge
+                        $type={product.display === "T" ? "active" : "inactive"}
+                      >
+                        {product.display === "T" ? "진열" : "미진열"}
+                      </Badge>
+                    </MetaItem>
+                    <MetaItem>
+                      <Badge>
+                        {product.option_type === "T"
+                          ? "품목형 옵션"
+                          : product.option_type === "F"
+                          ? "연동형 옵션"
+                          : "옵션없음"}
+                      </Badge>
+                    </MetaItem>
+                  </ProductMeta>
+                </ProductInfo>
+
+                <ProductActions>
+                  <ActionButton
+                    $variant="primary"
+                    onClick={() => toggleProductOptions(product.product_no)}
+                  >
+                    {expandedProducts[product.product_no]
+                      ? "옵션 닫기"
+                      : "옵션 및 가격 관리"}
+                  </ActionButton>
+                </ProductActions>
+              </ProductHeader>
+
+              {expandedProducts[product.product_no] && (
+                <OptionsSection>
+                  {/* 기본 상품 가격 수정 */}
+                  <OptionGroup>
+                    <OptionTitle>기본 상품 가격</OptionTitle>
+                    <OptionsList>
+                      <OptionItem>
+                        <OptionName>기본 판매가</OptionName>
+                        {editingPrices[product.product_no] !== undefined ? (
+                          <PriceEditForm
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              savePriceEdit(product.product_no);
+                            }}
+                          >
+                            <PriceInput
+                              type="number"
+                              value={editingPrices[product.product_no]}
+                              onChange={(e) =>
+                                setEditingPrices((prev) => ({
+                                  ...prev,
+                                  [product.product_no]: e.target.value,
+                                }))
+                              }
+                              disabled={savingPrices[product.product_no]}
+                            />
+                            <ActionButton
+                              type="submit"
+                              disabled={savingPrices[product.product_no]}
+                            >
+                              {savingPrices[product.product_no] ? (
+                                <>
+                                  저장중
+                                  <LoadingSpinner />
+                                </>
+                              ) : (
+                                "저장"
+                              )}
+                            </ActionButton>
+                            <ActionButton
+                              type="button"
+                              onClick={() =>
+                                cancelPriceEdit(product.product_no)
+                              }
+                              disabled={savingPrices[product.product_no]}
+                            >
+                              취소
+                            </ActionButton>
+                          </PriceEditForm>
+                        ) : (
+                          <>
+                            <OptionPrice>
+                              {parseInt(product.price || 0).toLocaleString()}원
+                            </OptionPrice>
+                            <ActionButton
+                              onClick={() =>
+                                startPriceEdit(
+                                  product.product_no,
+                                  null,
+                                  product.price
+                                )
+                              }
+                            >
+                              수정
+                            </ActionButton>
+                          </>
+                        )}
+                      </OptionItem>
+                      {priceUpdateSuccess[product.product_no] && (
+                        <SuccessMessage>
+                          ✓ 가격이 성공적으로 수정되었습니다.
+                        </SuccessMessage>
+                      )}
+                    </OptionsList>
+                  </OptionGroup>
+
+                  {/* 품목형 옵션 (variants) */}
+                  {product.option_type === "T" &&
+                    productOptions[product.product_no]?.variants?.length >
+                      0 && (
+                      <OptionGroup>
+                        <OptionTitle>품목형 옵션 (Variants)</OptionTitle>
+                        <OptionsList>
+                          {productOptions[product.product_no].variants.map(
+                            (variant) => {
+                              const variantKey = `${product.product_no}_${variant.variant_no}`;
+                              return (
+                                <div key={variant.variant_no}>
+                                  <OptionItem>
+                                    <OptionName>
+                                      {variant.option_value ||
+                                        variant.variant_name ||
+                                        `옵션 ${variant.variant_no}`}
+                                    </OptionName>
+                                    {editingPrices[variantKey] !== undefined ? (
+                                      <PriceEditForm
+                                        onSubmit={(e) => {
+                                          e.preventDefault();
+                                          savePriceEdit(
+                                            product.product_no,
+                                            variant.variant_no
+                                          );
+                                        }}
+                                      >
+                                        <PriceInput
+                                          type="number"
+                                          value={editingPrices[variantKey]}
+                                          onChange={(e) =>
+                                            setEditingPrices((prev) => ({
+                                              ...prev,
+                                              [variantKey]: e.target.value,
+                                            }))
+                                          }
+                                          disabled={savingPrices[variantKey]}
+                                        />
+                                        <ActionButton
+                                          type="submit"
+                                          disabled={savingPrices[variantKey]}
+                                        >
+                                          {savingPrices[variantKey] ? (
+                                            <>
+                                              저장중
+                                              <LoadingSpinner />
+                                            </>
+                                          ) : (
+                                            "저장"
+                                          )}
+                                        </ActionButton>
+                                        <ActionButton
+                                          type="button"
+                                          onClick={() =>
+                                            cancelPriceEdit(
+                                              product.product_no,
+                                              variant.variant_no
+                                            )
+                                          }
+                                          disabled={savingPrices[variantKey]}
+                                        >
+                                          취소
+                                        </ActionButton>
+                                      </PriceEditForm>
+                                    ) : (
+                                      <>
+                                        <OptionPrice>
+                                          {parseInt(
+                                            variant.price || product.price || 0
+                                          ).toLocaleString()}
+                                          원
+                                        </OptionPrice>
+                                        <ActionButton
+                                          onClick={() =>
+                                            startPriceEdit(
+                                              product.product_no,
+                                              variant.variant_no,
+                                              variant.price || product.price
+                                            )
+                                          }
+                                        >
+                                          수정
+                                        </ActionButton>
+                                      </>
+                                    )}
+                                  </OptionItem>
+                                  {priceUpdateSuccess[variantKey] && (
+                                    <SuccessMessage>
+                                      ✓ 옵션 가격이 성공적으로 수정되었습니다.
+                                    </SuccessMessage>
+                                  )}
+                                </div>
+                              );
+                            }
+                          )}
+                        </OptionsList>
+                      </OptionGroup>
+                    )}
+
+                  {/* 연동형 옵션은 읽기 전용 */}
+                  {product.option_type === "F" &&
+                    productOptions[product.product_no]?.options?.length > 0 && (
+                      <OptionGroup>
+                        <OptionTitle>
+                          연동형 옵션 (Options) - 읽기 전용
+                        </OptionTitle>
+                        <OptionsList>
+                          {productOptions[product.product_no].options.map(
+                            (option, index) => (
+                              <OptionItem key={index}>
+                                <OptionName>
+                                  {option.option_name}: {option.option_value}
+                                </OptionName>
+                                <OptionPrice>
+                                  추가금액:{" "}
+                                  {parseInt(
+                                    option.option_price || 0
+                                  ).toLocaleString()}
+                                  원
+                                </OptionPrice>
+                              </OptionItem>
+                            )
+                          )}
+                        </OptionsList>
+                      </OptionGroup>
+                    )}
+
+                  {/* 옵션 로딩 중 */}
+                  {!productOptions[product.product_no]?.variants?.length &&
+                    !productOptions[product.product_no]?.options?.length &&
+                    product.option_type !== "E" && (
+                      <EmptyState>
+                        <p>옵션 정보를 불러오는 중...</p>
+                      </EmptyState>
+                    )}
+                </OptionsSection>
+              )}
+            </ProductCard>
+          ))}
         </ResultsSection>
       )}
 
@@ -529,15 +1032,6 @@ const ProductSearchPage = () => {
             <p>다른 검색어를 시도해보세요.</p>
           </EmptyState>
         </ResultsSection>
-      )}
-
-      {showDebug && debugInfo && (
-        <DebugPanel>
-          <pre>{debugInfo}</pre>
-          <div style={{ marginTop: "8px", fontSize: "10px", opacity: 0.7 }}>
-            Ctrl+D to toggle
-          </div>
-        </DebugPanel>
       )}
     </Container>
   );
