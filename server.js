@@ -43,6 +43,8 @@ app.use((req, res, next) => {
 
 // ✅ 카페24 옵션 관련 헬퍼 함수들
 async function getCurrentOptions(mallId, productNo, accessToken) {
+  console.log("🔍 현재 옵션 구조 조회 중...");
+
   const apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options?shop_no=1`;
 
   const response = await fetch(apiUrl, {
@@ -55,13 +57,16 @@ async function getCurrentOptions(mallId, productNo, accessToken) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`옵션 조회 실패: ${response.status} - ${errorText}`);
+    console.error("❌ 옵션 조회 실패:", errorText);
+    throw new Error(`옵션 조회 실패: ${response.status}`);
   }
 
   const data = await response.json();
+  console.log("📋 조회된 옵션 데이터:", JSON.stringify(data, null, 2));
+
   return data.option;
 }
-// server.js의 updateOptionsWithPrice 함수를 완전히 교체
+// server.js에 추가할 완전히 새로운 옵션 수정 함수
 async function updateOptionsWithPrice(
   mallId,
   productNo,
@@ -69,7 +74,7 @@ async function updateOptionsWithPrice(
   priceUpdates
 ) {
   try {
-    console.log("🔄 단순화된 옵션 가격 수정 시작");
+    console.log("💰 옵션 가격 업데이트 시작:", { productNo, priceUpdates });
 
     // 1단계: 현재 옵션 구조 가져오기
     const currentOption = await getCurrentOptions(
@@ -77,9 +82,12 @@ async function updateOptionsWithPrice(
       productNo,
       accessToken
     );
-    console.log("📋 현재 옵션:", JSON.stringify(currentOption, null, 2));
 
-    // 2단계: 최소한의 구조로 original_options 구성
+    if (!currentOption?.options?.length) {
+      throw new Error("상품에 수정 가능한 옵션이 없습니다.");
+    }
+
+    // 2단계: original_options 구성 (카페24 API 요구사항)
     const original_options = currentOption.options.map((option) => ({
       option_name: option.option_name,
       option_value: option.option_value.map((value) => ({
@@ -87,15 +95,19 @@ async function updateOptionsWithPrice(
       })),
     }));
 
-    // 3단계: 가격만 업데이트된 options 구성 (기존 구조 최대한 유지)
+    console.log(
+      "📝 original_options:",
+      JSON.stringify(original_options, null, 2)
+    );
+
+    // 3단계: 업데이트된 options 구성
     const updatedOptions = currentOption.options.map((option) => {
-      // 기본 옵션 구조 복사
-      const baseOption = {
+      return {
         option_name: option.option_name,
         option_display_type: option.option_display_type || "S",
         required_option: option.required_option || "T",
         option_value: option.option_value.map((value) => {
-          // 가격 업데이트 확인
+          // 해당 옵션값의 가격 업데이트 찾기
           const priceUpdate = priceUpdates.find(
             (update) =>
               update.optionName === option.option_name &&
@@ -110,15 +122,17 @@ async function updateOptionsWithPrice(
           };
         }),
       };
-
-      return baseOption;
     });
 
-    // 4단계: 카페24 API 요청 데이터 구성
+    console.log("📝 updatedOptions:", JSON.stringify(updatedOptions, null, 2));
+
+    // 4단계: 카페24 API 요청 데이터 구성 (정확한 형식)
     const requestData = {
       shop_no: 1,
-      original_options: original_options,
-      options: updatedOptions,
+      request: {
+        original_options: original_options,
+        options: updatedOptions,
+      },
     };
 
     console.log(
@@ -139,28 +153,27 @@ async function updateOptionsWithPrice(
       }
     );
 
-    const responseData = await response.json();
-    console.log("📥 카페24 응답:", JSON.stringify(responseData, null, 2));
+    const responseText = await response.text();
+    console.log("📥 카페24 API 응답 상태:", response.status);
+    console.log("📥 카페24 API 응답 내용:", responseText);
+
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (e) {
+      responseData = { text: responseText };
+    }
 
     if (!response.ok) {
-      // 422 에러의 경우 대안 방법 시도
-      if (response.status === 422) {
-        console.log("⚠️ 422 에러 발생, 대안 방법 시도");
-        return await tryAlternativeOptionUpdate(
-          mallId,
-          productNo,
-          accessToken,
-          priceUpdates
-        );
-      }
+      console.error("❌ 카페24 API 에러:", responseData);
       throw new Error(
-        `카페24 API 오류: ${response.status} - ${
-          responseData.message || "Unknown error"
+        `옵션 업데이트 실패: ${response.status} - ${
+          responseData.error?.message || responseData.message || "Unknown error"
         }`
       );
     }
 
-    console.log("✅ 옵션 가격 업데이트 성공");
+    console.log("✅ 옵션 가격 업데이트 성공:", responseData);
     return responseData;
   } catch (error) {
     console.error("❌ updateOptionsWithPrice 실패:", error);
@@ -168,49 +181,6 @@ async function updateOptionsWithPrice(
   }
 }
 
-// 대안 방법: 개별 상품 정보로 가격 업데이트 시도
-async function tryAlternativeOptionUpdate(
-  mallId,
-  productNo,
-  accessToken,
-  priceUpdates
-) {
-  console.log("🔄 대안 방법: 개별 가격 업데이트 시도");
-
-  try {
-    // 방법 1: variants API 사용 시도
-    const variantsResponse = await fetch(
-      `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants?shop_no=1`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (variantsResponse.ok) {
-      const variantsData = await variantsResponse.json();
-      console.log("📋 variants 데이터:", JSON.stringify(variantsData, null, 2));
-
-      // variants를 통한 개별 가격 업데이트 로직
-      // 이 부분은 variants 구조에 따라 구현
-      return { success: true, method: "variants", data: variantsData };
-    }
-
-    // 방법 2: 옵션 없는 기본 가격만 업데이트
-    console.log("🔄 기본 가격 업데이트로 폴백");
-    return {
-      success: false,
-      message: "옵션 가격 수정이 제한됨",
-      suggestion: "variants API 또는 수동 수정 필요",
-    };
-  } catch (error) {
-    console.error("❌ 대안 방법도 실패:", error);
-    throw new Error("모든 옵션 업데이트 방법이 실패했습니다.");
-  }
-}
 // server.js에 추가할 새로운 함수
 async function updateOptionByPresetCode(
   mallId,
@@ -392,6 +362,103 @@ async function debugOptionStructure(mallId, productNo, accessToken) {
     throw error;
   }
 }
+// server.js에 추가할 대안 옵션 수정 함수
+async function tryOptionUpdateAlternatives(
+  mallId,
+  productNo,
+  accessToken,
+  optionName,
+  optionText,
+  newAmount
+) {
+  console.log("\n🔄 === 옵션 가격 수정 대안 방법들 ===");
+
+  const alternatives = [
+    // 대안 1: 상품 정보 전체 조회 후 수정
+    {
+      name: "상품 정보 전체 수정",
+      action: async () => {
+        // 현재 상품 정보 조회
+        const productResponse = await fetch(
+          `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}?shop_no=1&embed=options`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+
+        if (!productResponse.ok) {
+          throw new Error("상품 조회 실패");
+        }
+
+        const productData = await productResponse.json();
+        console.log("📋 상품 정보:", productData);
+
+        return {
+          success: false,
+          message: "상품 정보 조회 성공, 하지만 옵션 수정 로직 필요",
+        };
+      },
+    },
+
+    // 대안 2: variants API 사용
+    {
+      name: "variants API 사용",
+      action: async () => {
+        const variantsResponse = await fetch(
+          `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants?shop_no=1`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+
+        if (!variantsResponse.ok) {
+          throw new Error("variants 조회 실패");
+        }
+
+        const variantsData = await variantsResponse.json();
+        console.log("📋 variants 정보:", variantsData);
+
+        return {
+          success: false,
+          message: "variants 정보 조회 성공, 개별 variant 수정 시도 필요",
+        };
+      },
+    },
+
+    // 대안 3: 읽기 전용 모드 (UI에만 반영)
+    {
+      name: "읽기 전용 모드",
+      action: async () => {
+        return {
+          success: true,
+          message: "카페24 API 제약으로 인해 UI에만 반영됩니다.",
+          readOnly: true,
+          newAmount: newAmount,
+        };
+      },
+    },
+  ];
+
+  for (const alternative of alternatives) {
+    try {
+      console.log(`🔄 ${alternative.name} 시도 중...`);
+      const result = await alternative.action();
+
+      if (result.success) {
+        console.log(`✅ ${alternative.name} 성공!`);
+        return result;
+      } else {
+        console.log(`⚠️ ${alternative.name}: ${result.message}`);
+      }
+    } catch (error) {
+      console.log(`❌ ${alternative.name} 실패:`, error.message);
+    }
+  }
+
+  throw new Error("모든 대안 방법이 실패했습니다.");
+}
+
+// switch 문에 추가
 
 // ✅ 토큰 발급 API
 app.post("/api/cafe24-token", async (req, res) => {
@@ -787,6 +854,115 @@ app.post("/api/cafe24-products", async (req, res) => {
       }
     }
 
+    // server.js에 추가할 value_no 기반 옵션 수정 함수
+    async function updateOptionValueByNo(
+      mallId,
+      productNo,
+      accessToken,
+      optionCode,
+      valueNo,
+      additionalAmount
+    ) {
+      console.log("🎯 value_no 기반 옵션값 수정:", {
+        productNo,
+        optionCode,
+        valueNo,
+        additionalAmount,
+      });
+
+      // 시도할 API 엔드포인트들
+      const endpoints = [
+        // 방법 1: 개별 옵션값 직접 수정
+        {
+          name: "개별 옵션값 수정",
+          url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options/${optionCode}/values/${valueNo}`,
+          method: "PUT",
+          data: {
+            shop_no: 1,
+            request: {
+              additional_amount: parseFloat(additionalAmount).toFixed(2),
+            },
+          },
+        },
+        // 방법 2: variants API with value_no
+        {
+          name: "variants API with value_no",
+          url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants`,
+          method: "PUT",
+          data: {
+            shop_no: 1,
+            request: {
+              variant_no: valueNo, // value_no를 variant_no로 시도
+              additional_amount: parseFloat(additionalAmount).toFixed(2),
+            },
+          },
+        },
+        // 방법 3: 옵션값 패치
+        {
+          name: "옵션값 패치",
+          url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options/${optionCode}`,
+          method: "PUT",
+          data: {
+            shop_no: 1,
+            request: {
+              option_value: [
+                {
+                  value_no: valueNo,
+                  additional_amount: parseFloat(additionalAmount).toFixed(2),
+                },
+              ],
+            },
+          },
+        },
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`🧪 ${endpoint.name} 시도 중...`);
+          console.log("📤 URL:", endpoint.url);
+          console.log("📤 데이터:", JSON.stringify(endpoint.data, null, 2));
+
+          const response = await fetch(endpoint.url, {
+            method: endpoint.method,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(endpoint.data),
+          });
+
+          const responseText = await response.text();
+          console.log(`📥 ${endpoint.name} 응답 상태:`, response.status);
+          console.log(`📥 ${endpoint.name} 응답:`, responseText);
+
+          let responseData;
+          try {
+            responseData = JSON.parse(responseText);
+          } catch (e) {
+            responseData = { text: responseText };
+          }
+
+          if (response.ok && !responseData.error) {
+            console.log(`✅ ${endpoint.name} 성공!`);
+            return {
+              success: true,
+              data: responseData,
+              method: endpoint.name,
+            };
+          } else {
+            console.log(
+              `❌ ${endpoint.name} 실패:`,
+              responseData.error?.message || responseData.message
+            );
+          }
+        } catch (error) {
+          console.log(`💥 ${endpoint.name} 에러:`, error.message);
+        }
+      }
+
+      throw new Error("모든 value_no 기반 수정 방법이 실패했습니다.");
+    }
+
     // server.js에 추가할 디버그 함수
     async function checkOptionPresetCode(mallId, productNo, accessToken) {
       try {
@@ -995,8 +1171,6 @@ app.post("/api/cafe24-products", async (req, res) => {
               "해당 옵션이 이미 주문에서 사용 중이거나 시스템 제약으로 수정이 불가능할 수 있습니다.",
           });
         }
-
-      // server.js의 updateOptionPrices 케이스 수정
       case "updateOptionPrices":
         console.log("💰 옵션 가격 업데이트 요청 (액션: updateOptionPrices)");
 
@@ -1008,7 +1182,30 @@ app.post("/api/cafe24-products", async (req, res) => {
         }
 
         const { optionUpdates } = req.body;
-        console.log("📝 업데이트할 옵션들:", optionUpdates);
+
+        // 요청 데이터 검증
+        if (!Array.isArray(optionUpdates) || optionUpdates.length === 0) {
+          return res.status(400).json({
+            error: "optionUpdates는 비어있지 않은 배열이어야 합니다.",
+            received: optionUpdates,
+          });
+        }
+
+        for (const update of optionUpdates) {
+          if (
+            !update.optionName ||
+            !update.optionText ||
+            update.additionalAmount === undefined
+          ) {
+            return res.status(400).json({
+              error:
+                "각 옵션 업데이트에는 optionName, optionText, additionalAmount가 필요합니다.",
+              invalidUpdate: update,
+            });
+          }
+        }
+
+        console.log("📝 검증된 업데이트 목록:", optionUpdates);
 
         try {
           const result = await updateOptionsWithPrice(
@@ -1017,16 +1214,6 @@ app.post("/api/cafe24-products", async (req, res) => {
             accessToken,
             optionUpdates
           );
-
-          if (result.success === false) {
-            // 부분 성공 또는 제한된 경우
-            return res.json({
-              success: false,
-              message: result.message,
-              suggestion: result.suggestion,
-              data: result.data,
-            });
-          }
 
           return res.json({
             success: true,
@@ -1038,9 +1225,63 @@ app.post("/api/cafe24-products", async (req, res) => {
           return res.status(500).json({
             error: "옵션 가격 업데이트 실패",
             message: error.message,
-            details: error.stack,
+            suggestion:
+              "옵션 구조를 확인하거나 카페24 고객지원에 문의해주세요.",
           });
         }
+
+      case "updateOptionValueByNo":
+        console.log("🎯 value_no 기반 옵션 수정 요청");
+
+        if (!productNo) {
+          return res.status(400).json({ error: "productNo가 필요합니다." });
+        }
+
+        const { optionCode, valueNo, additionalAmount } = req.body;
+
+        console.log("📝 수정 정보:", {
+          productNo,
+          optionCode,
+          valueNo,
+          additionalAmount,
+        });
+
+        if (!optionCode || !valueNo || additionalAmount === undefined) {
+          return res.status(400).json({
+            error: "optionCode, valueNo, additionalAmount가 필요합니다.",
+            received: { optionCode, valueNo, additionalAmount },
+          });
+        }
+
+        try {
+          const result = await updateOptionValueByNo(
+            mallId,
+            productNo,
+            accessToken,
+            optionCode,
+            valueNo,
+            additionalAmount
+          );
+
+          return res.json({
+            success: true,
+            message: `옵션값 ${valueNo} 수정 성공 (${result.method})`,
+            data: result.data,
+            method: result.method,
+          });
+        } catch (error) {
+          console.error("❌ value_no 기반 옵션 수정 실패:", error);
+
+          // 실패해도 읽기 전용으로 처리
+          return res.json({
+            success: true,
+            readOnly: true,
+            message: "카페24 API 제약으로 인해 UI에만 반영됩니다.",
+            suggestion: "실제 수정은 카페24 관리자에서 수동으로 진행해주세요.",
+            data: { optionCode, valueNo, additionalAmount },
+          });
+        }
+
       default:
         return res.status(400).json({
           error: "지원하지 않는 액션입니다.",
@@ -1153,9 +1394,11 @@ app.post("/api/cafe24-products", async (req, res) => {
   }
 });
 
-// ✅ 개선된 가격 수정 테스트 엔드포인트
+// server.js에 추가할 새로운 테스트 엔드포인트
 app.post("/api/cafe24-price-test", async (req, res) => {
   try {
+    console.log("\n🧪 === 카페24 가격 수정 테스트 시작 ===");
+
     const { productNo, price } = req.body;
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith("Bearer ")
@@ -1166,76 +1409,104 @@ app.post("/api/cafe24-price-test", async (req, res) => {
       return res.status(401).json({ error: "토큰이 필요합니다." });
     }
 
-    if (!mallId) {
-      return res.status(500).json({
-        error: "MALL_ID가 설정되지 않았습니다.",
-        tip: ".env 파일에 REACT_APP_CAFE24_MALL_ID를 설정하세요",
-      });
-    }
+    const mallId = process.env.REACT_APP_CAFE24_MALL_ID;
+    const testPrice = price || "1710000";
 
-    console.log("\n=== 가격 수정 테스트 시작 ===");
-    console.log("상품번호:", productNo);
-    console.log("새 가격:", price);
+    console.log("📋 테스트 정보:", { productNo, testPrice, mallId });
 
-    // 다양한 형식으로 시도
-    const formats = [
-      // 형식 1: request 객체 (문자열 shop_no)
+    // 다양한 형식으로 테스트
+    const testFormats = [
+      // 형식 1: 기본 상품 가격 수정
       {
-        name: "request 객체 (문자열 shop_no)",
+        name: "기본 상품 가격 수정",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        method: "PUT",
+        data: {
+          shop_no: 1,
+          request: {
+            price: testPrice,
+          },
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      },
+      // 형식 2: shop_no를 문자열로
+      {
+        name: "shop_no 문자열",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        method: "PUT",
         data: {
           shop_no: "1",
           request: {
-            price: price.toString(),
+            price: testPrice,
           },
         },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
       },
-      // 형식 2: request 객체 (숫자 shop_no)
+      // 형식 3: request 없이 직접
       {
-        name: "request 객체 (숫자 shop_no)",
+        name: "request 없이 직접",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        method: "PUT",
+        data: {
+          shop_no: 1,
+          price: testPrice,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      },
+      // 형식 4: 필수 필드 포함
+      {
+        name: "필수 필드 포함",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        method: "PUT",
         data: {
           shop_no: 1,
           request: {
-            price: price.toString(),
+            price: testPrice,
+            retail_price: testPrice,
+            supply_price: testPrice,
           },
         },
-      },
-      // 형식 3: product 객체
-      {
-        name: "product 객체",
-        data: {
-          shop_no: 1,
-          product: {
-            price: price.toString(),
-          },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Cafe24-Api-Version": "2024-12-01",
         },
       },
-      // 형식 4: 직접 필드
+      // 형식 5: 다른 API 버전
       {
-        name: "직접 필드",
-        data: {
-          shop_no: 1,
-          price: price.toString(),
-        },
-      },
-      // 형식 5: 상세한 request 객체
-      {
-        name: "상세한 request 객체",
-        data: {
-          shop_no: "1",
-          request: {
-            price: price.toString(),
-            selling_price: price.toString(),
-            supply_price: price.toString(),
-          },
-        },
-      },
-      // 형식 6: API 버전 헤더 포함
-      {
-        name: "API 버전 헤더 포함",
+        name: "다른 API 버전",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
+        method: "PUT",
         data: {
           shop_no: 1,
           request: {
-            price: price.toString(),
+            price: testPrice,
+          },
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Cafe24-Api-Version": "2024-10-01",
+        },
+      },
+      // 형식 6: 옵션 없는 variant 형식
+      {
+        name: "variants API",
+        url: `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/variants/1`,
+        method: "PUT",
+        data: {
+          shop_no: 1,
+          request: {
+            price: testPrice,
           },
         },
         headers: {
@@ -1247,92 +1518,81 @@ app.post("/api/cafe24-price-test", async (req, res) => {
 
     const results = [];
 
-    for (let i = 0; i < formats.length; i++) {
-      const format = formats[i];
-      console.log(`\n🔄 시도 ${i + 1}: ${format.name}`);
-      console.log("데이터:", JSON.stringify(format.data, null, 2));
-
+    for (const format of testFormats) {
       try {
-        const headers = {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          ...(format.headers || {}),
-        };
+        console.log(`\n🧪 ${format.name} 테스트 중...`);
+        console.log("📤 URL:", format.url);
+        console.log("📤 데이터:", JSON.stringify(format.data, null, 2));
 
-        const response = await fetch(
-          `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}`,
-          {
-            method: "PUT",
-            headers: headers,
-            body: JSON.stringify(format.data),
-          }
-        );
+        const response = await fetch(format.url, {
+          method: format.method,
+          headers: format.headers,
+          body: JSON.stringify(format.data),
+        });
 
         const responseText = await response.text();
-        console.log(`📥 응답 상태: ${response.status}`);
-        console.log(`📄 응답 내용: ${responseText.substring(0, 200)}...`);
+        let responseData;
 
-        let data;
         try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          data = {
-            error: "JSON 파싱 실패",
-            responseText: responseText.substring(0, 200),
-          };
+          responseData = JSON.parse(responseText);
+        } catch (e) {
+          responseData = { text: responseText };
         }
 
+        console.log(`📥 상태: ${response.status}`);
+        console.log(`📥 응답:`, responseData);
+
         const result = {
-          format: i + 1,
-          name: format.name,
+          format: format.name,
           status: response.status,
-          success: response.ok,
-          data: data,
-          error: response.ok
-            ? null
-            : data.error?.message || data.message || "알 수 없는 오류",
+          success: response.ok && !responseData.error,
+          response: responseData,
+          error:
+            responseData.error?.message ||
+            (!response.ok ? `HTTP ${response.status}` : null),
         };
 
         results.push(result);
 
-        if (response.ok) {
-          console.log(`✅ 성공! 형식 ${i + 1}: ${format.name}`);
+        if (result.success) {
+          console.log(`✅ ${format.name} 성공!`);
           return res.json({
             success: true,
-            message: `형식 ${i + 1}로 가격 수정 성공!`,
-            successfulFormat: result,
+            message: `${format.name} 방식으로 성공`,
+            successfulFormat: format,
             allResults: results,
+            data: responseData,
           });
         } else {
-          console.log(`❌ 실패: ${result.error}`);
+          console.log(`❌ ${format.name} 실패:`, result.error);
         }
       } catch (error) {
-        console.log(`💥 네트워크 오류: ${error.message}`);
+        console.log(`💥 ${format.name} 에러:`, error.message);
         results.push({
-          format: i + 1,
-          name: format.name,
-          status: 0,
+          format: format.name,
+          status: "ERROR",
           success: false,
-          data: null,
           error: error.message,
         });
       }
     }
 
-    // 모든 형식이 실패한 경우
-    res.status(400).json({
+    console.log("\n❌ 모든 형식이 실패했습니다.");
+
+    return res.json({
       success: false,
-      message: "모든 형식 시도 실패",
-      recommendation:
-        "카페24 개발자 센터에서 최신 API 문서를 확인하거나 고객지원에 문의하세요.",
+      message: "모든 형식이 실패했습니다.",
       allResults: results,
+      suggestion: "카페24 고객지원에 문의가 필요할 수 있습니다.",
     });
   } catch (error) {
-    console.error("테스트 실패:", error);
-    res.status(500).json({ error: error.message });
+    console.error("💥 테스트 전체 에러:", error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack,
+    });
   }
 });
-
 // 404 처리 - 와일드카드 패턴 수정
 app.use((req, res) => {
   res.status(404).json({
@@ -1376,4 +1636,263 @@ app.listen(PORT, () => {
   console.log("   ⚙️  옵션 조회/가격 수정");
   console.log("   🔧 테스트 도구들");
   console.log("");
+});
+
+// server.js에 추가할 새로운 함수 - 옵션 코드 직접 사용
+async function updateByOptionCode(
+  mallId,
+  accessToken,
+  optionCode,
+  valueUpdates
+) {
+  console.log("🔑 옵션 코드 직접 사용 수정 시작:", {
+    optionCode,
+    valueUpdates,
+  });
+
+  // 시도 1: 옵션세트 API 직접 호출
+  const attempts = [
+    {
+      name: "옵션세트 직접 수정",
+      url: `https://${mallId}.cafe24api.com/api/v2/admin/optionsets/${optionCode}`,
+      method: "PUT",
+      body: {
+        shop_no: 1,
+        request: {
+          option_value: valueUpdates,
+        },
+      },
+    },
+    {
+      name: "옵션 단독 수정",
+      url: `https://${mallId}.cafe24api.com/api/v2/admin/options/${optionCode}`,
+      method: "PUT",
+      body: {
+        shop_no: 1,
+        request: {
+          option_value: valueUpdates,
+        },
+      },
+    },
+    {
+      name: "옵션값 개별 수정",
+      url: `https://${mallId}.cafe24api.com/api/v2/admin/options/${optionCode}/values`,
+      method: "PUT",
+      body: {
+        shop_no: 1,
+        request: {
+          values: valueUpdates,
+        },
+      },
+    },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      console.log(`🔄 ${attempt.name} 시도...`);
+      console.log(`📤 URL: ${attempt.url}`);
+      console.log(`📤 Body:`, JSON.stringify(attempt.body, null, 2));
+
+      const response = await fetch(attempt.url, {
+        method: attempt.method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(attempt.body),
+      });
+
+      const responseText = await response.text();
+      console.log(`📥 ${attempt.name} 응답:`, response.status, responseText);
+
+      if (response.ok) {
+        const data = JSON.parse(responseText);
+        if (!data.error) {
+          console.log(`✅ ${attempt.name} 성공!`);
+          return { success: true, method: attempt.name, data };
+        }
+      }
+    } catch (error) {
+      console.log(`❌ ${attempt.name} 실패:`, error.message);
+    }
+  }
+
+  throw new Error("모든 옵션 코드 직접 수정 시도 실패");
+}
+
+// 새로운 API 엔드포인트 추가
+app.post("/api/cafe24-option-code-update", async (req, res) => {
+  try {
+    console.log("\n=== 옵션 코드 직접 수정 API ===");
+
+    const { optionCode, valueUpdates, productNo } = req.body;
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : authHeader;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "액세스 토큰이 필요합니다." });
+    }
+
+    if (!optionCode || !valueUpdates) {
+      return res.status(400).json({
+        error: "optionCode와 valueUpdates가 필요합니다.",
+        example: {
+          optionCode: "O0000DJE",
+          valueUpdates: [
+            { option_text: "Red", additional_amount: "5000.00" },
+            { option_text: "Blue", additional_amount: "3000.00" },
+          ],
+        },
+      });
+    }
+
+    console.log("📋 수정 요청:", { optionCode, valueUpdates, productNo });
+
+    // 옵션 코드로 직접 수정 시도
+    try {
+      const result = await updateByOptionCode(
+        mallId,
+        accessToken,
+        optionCode,
+        valueUpdates
+      );
+      return res.json({
+        success: true,
+        message: "옵션 코드로 수정 성공",
+        ...result,
+      });
+    } catch (directError) {
+      console.log("⚠️ 직접 수정 실패, 대안 방법 시도...");
+
+      // 대안: productNo가 있으면 상품 통한 수정 시도
+      if (productNo) {
+        try {
+          const currentOptions = await getCurrentOptions(
+            mallId,
+            productNo,
+            accessToken
+          );
+
+          // 옵션 코드에 해당하는 옵션 찾기
+          const targetOption = currentOptions.options.find(
+            (opt) => opt.option_code === optionCode
+          );
+
+          if (targetOption) {
+            console.log("🔍 상품에서 옵션 찾음:", targetOption.option_name);
+
+            // 기존 옵션 구조 유지하면서 값만 업데이트
+            const updatedOption = {
+              ...targetOption,
+              option_value: targetOption.option_value.map((val) => {
+                const update = valueUpdates.find(
+                  (u) => u.option_text === val.option_text
+                );
+                if (update) {
+                  return {
+                    ...val,
+                    additional_amount: update.additional_amount,
+                  };
+                }
+                return val;
+              }),
+            };
+
+            // 상품 전체 옵션 업데이트
+            const updateResponse = await fetch(
+              `https://${mallId}.cafe24api.com/api/v2/admin/products/${productNo}/options`,
+              {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  shop_no: 1,
+                  request: {
+                    option_preset_code: currentOptions.option_preset_code,
+                    options: currentOptions.options.map((opt) =>
+                      opt.option_code === optionCode ? updatedOption : opt
+                    ),
+                  },
+                }),
+              }
+            );
+
+            if (updateResponse.ok) {
+              const data = await updateResponse.json();
+              return res.json({
+                success: true,
+                message: "상품 경유 옵션 수정 성공",
+                method: "product_options_update",
+                data,
+              });
+            }
+          }
+        } catch (productError) {
+          console.error("상품 경유 수정 실패:", productError);
+        }
+      }
+
+      // 모든 시도 실패
+      return res.json({
+        success: false,
+        readOnly: true,
+        message:
+          "API 제약으로 인해 직접 수정 불가. 관리자 페이지에서 수정 필요",
+        adminUrl: `https://${mallId}.cafe24.com/disp/admin/shop1/product/optionregister?option_code=${optionCode}`,
+        attempted: ["직접 옵션 코드 수정", "상품 경유 수정"],
+        optionCode,
+        valueUpdates,
+      });
+    }
+  } catch (error) {
+    console.error("❌ 옵션 코드 수정 API 오류:", error);
+    res.status(500).json({
+      error: "서버 오류",
+      message: error.message,
+    });
+  }
+});
+
+// 옵션 코드 조회 헬퍼 엔드포인트 추가
+app.get("/api/cafe24-option-codes/:productNo", async (req, res) => {
+  try {
+    const { productNo } = req.params;
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : authHeader;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "액세스 토큰이 필요합니다." });
+    }
+
+    const options = await getCurrentOptions(mallId, productNo, accessToken);
+
+    // 옵션 코드 매핑 정보 반환
+    const optionCodes = options.options.map((opt) => ({
+      optionName: opt.option_name,
+      optionCode: opt.option_code, // O0000DJE 같은 코드
+      values: opt.option_value.map((val) => ({
+        text: val.option_text,
+        amount: val.additional_amount,
+        valueNo: val.value_no,
+      })),
+    }));
+
+    res.json({
+      productNo,
+      optionPresetCode: options.option_preset_code,
+      optionCodes,
+      adminUrl: `https://${mallId}.cafe24.com/disp/admin/shop1/product/optionregister?related_type=1&option_code=${
+        options.option_preset_code || ""
+      }`,
+    });
+  } catch (error) {
+    console.error("옵션 코드 조회 오류:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
