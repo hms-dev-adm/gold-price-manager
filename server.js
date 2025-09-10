@@ -1005,10 +1005,125 @@ app.post("/api/cafe24-products", async (req, res) => {
         throw error;
       }
     }
-
+    let productsCache = {
+      data: null,
+      timestamp: null,
+      maxAge: 5 * 60 * 1000, // 5분 캐시
+    };
     switch (action) {
       case "searchProducts":
-        apiUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=100&embed=options`;
+        let allProducts = [];
+        let offset = 0;
+        const limit = 100; // 카페24 API 최대 허용값
+        let hasMoreProducts = true;
+
+        console.log(`🔍 전체 상품 검색 시작: ${searchQuery}`);
+        while (hasMoreProducts) {
+          try {
+            const pageUrl = `https://${mallId}.cafe24api.com/api/v2/admin/products?shop_no=1&limit=${limit}&offset=${offset}&embed=options`;
+
+            console.log(
+              `📄 페이지 ${
+                Math.floor(offset / limit) + 1
+              } 조회 중... (offset: ${offset})`
+            );
+
+            const pageResponse = await fetch(pageUrl, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            if (!pageResponse.ok) {
+              const errorText = await pageResponse.text();
+              console.error(`❌ 페이지 조회 실패:`, errorText);
+              throw new Error(`페이지 조회 실패: ${pageResponse.status}`);
+            }
+
+            const pageData = await pageResponse.json();
+
+            if (pageData.products && pageData.products.length > 0) {
+              allProducts = [...allProducts, ...pageData.products];
+              console.log(
+                `✅ ${pageData.products.length}개 상품 추가 (총 ${allProducts.length}개)`
+              );
+
+              // 다음 페이지가 있는지 확인
+              if (pageData.products.length < limit) {
+                hasMoreProducts = false;
+                console.log(
+                  `📊 마지막 페이지 도달. 총 ${allProducts.length}개 상품 조회 완료`
+                );
+              } else {
+                offset += limit;
+              }
+            } else {
+              hasMoreProducts = false;
+              console.log(
+                `📊 더 이상 상품이 없음. 총 ${allProducts.length}개 상품 조회 완료`
+              );
+            }
+          } catch (error) {
+            console.error(`❌ 페이지 조회 중 오류:`, error);
+            hasMoreProducts = false;
+          }
+        }
+
+        // 클라이언트 사이드 필터링
+        if (searchQuery && allProducts.length > 0) {
+          const originalCount = allProducts.length;
+          const searchLower = searchQuery.toLowerCase();
+
+          allProducts = allProducts.filter((product) => {
+            if (searchType === "name") {
+              return product.product_name?.toLowerCase().includes(searchLower);
+            } else if (searchType === "code") {
+              return product.product_code?.toLowerCase().includes(searchLower);
+            } else if (searchType === "id") {
+              return product.product_no?.toString() === searchQuery;
+            } else if (searchType === "model") {
+              // 모델명 검색 - 부분 일치 및 공백 제거 비교
+              const modelName =
+                product.model_name?.toLowerCase().replace(/\s/g, "") || "";
+              const searchTerm = searchLower.replace(/\s/g, "");
+              return (
+                modelName.includes(searchTerm) ||
+                product.model_name?.toLowerCase().includes(searchLower)
+              );
+            }
+            return false;
+          });
+
+          console.log(
+            `🎯 필터링 결과: ${originalCount}개 → ${allProducts.length}개`
+          );
+
+          // 검색 결과가 없을 때 추가 로깅
+          if (allProducts.length === 0) {
+            console.log(`⚠️ "${searchQuery}" 검색 결과 없음`);
+            console.log(`검색 타입: ${searchType}`);
+
+            // 비슷한 상품명 찾기 (디버깅용)
+            const similarProducts = [];
+            for (const product of allProducts.slice(0, 10)) {
+              // 처음 10개만 확인
+              if (searchType === "model" && product.model_name) {
+                console.log(
+                  `  - ${product.model_name} (상품번호: ${product.product_no})`
+                );
+              }
+            }
+          }
+        }
+
+        return res.json({
+          products: allProducts,
+          total_count: allProducts.length,
+          search_query: searchQuery,
+          search_type: searchType,
+        });
         break;
 
       case "getProduct":
